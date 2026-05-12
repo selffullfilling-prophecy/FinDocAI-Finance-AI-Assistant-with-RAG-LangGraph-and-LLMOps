@@ -67,8 +67,8 @@ The system is divided into three main flows:
 
 ---
 
-## 4. High-Level Flow
-![alt text](data/images/flow-general.png)
+## 4. General Flow
+![alt text](data/images/General-Flow.png)
 ---
 
 ## 5. Layered Architecture
