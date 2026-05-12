@@ -2,7 +2,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.rag.chunk_models import ChunkConfig, ChunkRecord, ChunkType, SectionSpan
-from app.rag.table_detector import detect_tables, remove_table_spans
+from app.rag.table_detector import detect_tables, replace_table_spans_with_placeholders
 
 
 def build_recursive_splitter(config: ChunkConfig | None = None) -> RecursiveCharacterTextSplitter:
@@ -59,13 +59,14 @@ def split_section(section: SectionSpan, config: ChunkConfig | None = None) -> li
                 metadata={
                     **base_metadata,
                     "table_index": table_index,
+                    "table_summary": f"{table.row_count} rows x {table.column_count} columns",
                     "row_count": table.row_count,
                     "column_count": table.column_count,
                 },
             )
         )
 
-    narrative_text = remove_table_spans(section.text, tables)
+    narrative_text = replace_table_spans_with_placeholders(section.text, tables)
     narrative_parts = splitter.split_text(narrative_text)
 
     for text_index, part in enumerate(narrative_parts):

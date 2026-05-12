@@ -49,10 +49,10 @@ class TableSpan:
     text: str
     start_char: int
     end_char: int
-    page_start: int | None = None 
-    page_end: int | None = None
     row_count: int
     column_count: int
+    page_start: int | None = None 
+    page_end: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

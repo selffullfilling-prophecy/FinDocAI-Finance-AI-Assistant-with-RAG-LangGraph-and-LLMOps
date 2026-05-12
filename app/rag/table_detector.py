@@ -83,12 +83,21 @@ def detect_tables(text: str, config: ChunkConfig | None = None) -> list[TableSpa
     return tables
 
 
-def remove_table_spans(text: str, tables: list[TableSpan]) -> str:
-    """Remove table blocks before recursive text splitting.
+def build_table_placeholder(table: TableSpan, table_index: int) -> str:
+    """Create a short marker kept in narrative chunks where a table was found."""
 
-    TODO(student): Instead of removing tables completely, try replacing them
-    with short placeholders like "[TABLE: Consolidated Statements]" so nearby
-    narrative chunks keep useful context.
+    return (
+        f"[TABLE {table_index}: {table.row_count} rows x "
+        f"{table.column_count} columns stored as separate table chunk]"
+    )
+
+
+def replace_table_spans_with_placeholders(text: str, tables: list[TableSpan]) -> str:
+    """Replace table blocks before recursive text splitting.
+
+    The table is still stored as its own chunk. The placeholder keeps nearby
+    text useful for retrieval, because the LLM can see that a financial table
+    occurred between two narrative paragraphs.
     """
 
     if not tables:
@@ -96,9 +105,19 @@ def remove_table_spans(text: str, tables: list[TableSpan]) -> str:
 
     pieces: list[str] = []
     cursor = 0
-    for table in sorted(tables, key=lambda span: span.start_char):
+    for table_index, table in enumerate(sorted(tables, key=lambda span: span.start_char)):
         pieces.append(text[cursor : table.start_char])
+        pieces.append(build_table_placeholder(table, table_index))
         cursor = table.end_char
     pieces.append(text[cursor:])
 
     return "\n".join(piece.strip() for piece in pieces if piece.strip())
+
+
+def remove_table_spans(text: str, tables: list[TableSpan]) -> str:
+    """Backward-compatible alias for older code.
+
+    Prefer `replace_table_spans_with_placeholders`.
+    """
+
+    return replace_table_spans_with_placeholders(text, tables)
