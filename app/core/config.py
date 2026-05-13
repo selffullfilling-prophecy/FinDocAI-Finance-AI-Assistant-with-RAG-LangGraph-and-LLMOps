@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     llm_provider: str = "nvidia"
 
-    nvidia_api_key: str
+    nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
     nvidia_temperature: float = 1.0
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     raw_data_dir: str = "data/raw"
     processed_data_dir: str = "data/processed"
 
-    api_key: str
+    api_key: str = "dev-secret-key"
     rate_limit_per_minute: int = 30
 
     langchain_tracing_v2: bool = False

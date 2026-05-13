@@ -51,20 +51,29 @@ def split_section(section: SectionSpan, config: ChunkConfig | None = None) -> li
 
     tables = detect_tables(section.text, cfg)
     for table_index, table in enumerate(tables):
-        chunks.append(
-            ChunkRecord(
-                chunk_id=f"item-{section.item_id}-table-{table_index:03d}",
-                content=table.text,
-                chunk_type=ChunkType.TABLE,
-                metadata={
-                    **base_metadata,
-                    "table_index": table_index,
-                    "table_summary": f"{table.row_count} rows x {table.column_count} columns",
-                    "row_count": table.row_count,
-                    "column_count": table.column_count,
-                },
+        table_parts = split_large_table_text(table.text, cfg.max_table_chunk_chars)
+        for table_part_index, table_part in enumerate(table_parts):
+            part_suffix = (
+                f"-part-{table_part_index:02d}"
+                if len(table_parts) > 1
+                else ""
             )
-        )
+            chunks.append(
+                ChunkRecord(
+                    chunk_id=f"item-{section.item_id}-table-{table_index:03d}{part_suffix}",
+                    content=table_part,
+                    chunk_type=ChunkType.TABLE,
+                    metadata={
+                        **base_metadata,
+                        "table_index": table_index,
+                        "table_part_index": table_part_index,
+                        "table_part_count": len(table_parts),
+                        "table_summary": f"{table.row_count} rows x {table.column_count} columns",
+                        "row_count": table.row_count,
+                        "column_count": table.column_count,
+                    },
+                )
+            )
 
     narrative_text = replace_table_spans_with_placeholders(section.text, tables)
     narrative_parts = splitter.split_text(narrative_text)
@@ -87,6 +96,32 @@ def split_section(section: SectionSpan, config: ChunkConfig | None = None) -> li
         )
 
     return chunks
+
+
+def split_large_table_text(table_text: str, max_chars: int) -> list[str]:
+    """Split oversized table-like blocks on row boundaries."""
+
+    if len(table_text) <= max_chars:
+        return [table_text]
+
+    parts: list[str] = []
+    current_lines: list[str] = []
+    current_size = 0
+
+    for line in table_text.splitlines():
+        line_size = len(line) + 1
+        if current_lines and current_size + line_size > max_chars:
+            parts.append("\n".join(current_lines).strip())
+            current_lines = []
+            current_size = 0
+
+        current_lines.append(line)
+        current_size += line_size
+
+    if current_lines:
+        parts.append("\n".join(current_lines).strip())
+
+    return [part for part in parts if part]
 
 
 def chunk_records_to_documents(records: list[ChunkRecord], source_metadata: dict | None = None) -> list[Document]:

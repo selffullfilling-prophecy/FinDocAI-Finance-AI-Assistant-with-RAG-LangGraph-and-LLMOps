@@ -26,6 +26,7 @@ class ChunkConfig:
     min_chunk_chars: int = 120
     table_min_columns: int = 3
     table_min_rows: int = 2
+    max_table_chunk_chars: int = 1800
 
 
 @dataclass(frozen=True)
