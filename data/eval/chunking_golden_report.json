@@ -1,0 +1,82 @@
+{
+  "total_cases": 3,
+  "passed_cases": 2,
+  "failed_cases": 0,
+  "skipped_cases": 1,
+  "pass_rate": 1.0,
+  "summary_score": 100.0,
+  "case_results": [
+    {
+      "case_id": "aapl_2023_chunking_core",
+      "status": "passed",
+      "document_path": "data/images/raw/reports/NASDAQ_AAPL_2023.pdf",
+      "total_chunks": 361,
+      "found_sections": [
+        "1",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "1A",
+        "2",
+        "3",
+        "5",
+        "7",
+        "7A",
+        "8",
+        "9A",
+        "9B"
+      ],
+      "chunk_type_counts": {
+        "table": 143,
+        "section_text": 218
+      },
+      "unknown_section_ratio": 0.0,
+      "issues": []
+    },
+    {
+      "case_id": "amzn_2022_chunking_core",
+      "status": "passed",
+      "document_path": "data/images/raw/reports/NASDAQ_AMZN_2022.pdf",
+      "total_chunks": 401,
+      "found_sections": [
+        "1",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "1A",
+        "2",
+        "3",
+        "5",
+        "7",
+        "7A",
+        "8",
+        "9A"
+      ],
+      "chunk_type_counts": {
+        "table": 153,
+        "section_text": 248
+      },
+      "unknown_section_ratio": 0.0,
+      "issues": []
+    },
+    {
+      "case_id": "missing_document_example",
+      "status": "skipped",
+      "document_path": "data/raw/DOES_NOT_EXIST_10K.pdf",
+      "total_chunks": 0,
+      "found_sections": [],
+      "chunk_type_counts": {},
+      "issues": [
+        "Document not found: data/raw/DOES_NOT_EXIST_10K.pdf"
+      ]
+    }
+  ]
+}

@@ -18,6 +18,7 @@ from app.rag.chunk_artifacts import (
     write_eval_report,
 )
 from app.rag.chunk_pipeline import chunk_10k_file
+from app.rag.keyword_retriever import retrieve_from_chunk_records
 from app.rag.loader import SUPPORTED_EXTENSIONS
 from app.rag.vector_store import collection_name_from_file, index_documents, similarity_search
 
@@ -235,67 +236,6 @@ def filtered_chunks(
         results.append(chunk)
 
     return results
-
-
-def tokenize_query(text: str) -> list[str]:
-    tokens = re.findall(r"[a-zA-Z0-9][a-zA-Z0-9'-]{1,}", text.lower())
-    stopwords = {
-        "the",
-        "and",
-        "for",
-        "with",
-        "from",
-        "that",
-        "this",
-        "what",
-        "where",
-        "when",
-        "which",
-        "were",
-        "was",
-        "are",
-        "how",
-        "did",
-        "does",
-        "cua",
-        "la",
-        "gi",
-        "trong",
-        "nam",
-    }
-    return [token for token in tokens if token not in stopwords]
-
-
-def score_chunk_for_query(chunk: dict[str, Any], query: str) -> dict[str, Any]:
-    metadata = chunk.get("metadata", {})
-    content = chunk.get("page_content", "")
-    content_lower = content.lower()
-    metadata_text = json.dumps(metadata, ensure_ascii=False).lower()
-    tokens = tokenize_query(query)
-
-    matched_terms = sorted(
-        {
-            token
-            for token in tokens
-            if token in content_lower or token in metadata_text
-        }
-    )
-    phrase_bonus = 8 if query.strip().lower() in content_lower else 0
-    table_bonus = 2 if metadata.get("chunk_type") == "table" else 0
-    section_bonus = 2 if str(metadata.get("section_item", "")).lower() in tokens else 0
-    score = len(matched_terms) * 3 + phrase_bonus + table_bonus + section_bonus
-
-    return {
-        "score": score,
-        "matched_terms": matched_terms,
-        "chunk": chunk,
-    }
-
-
-def retrieve_from_chunks(chunks: list[dict[str, Any]], query: str, top_k: int) -> list[dict[str, Any]]:
-    scored = [score_chunk_for_query(chunk, query) for chunk in chunks]
-    scored = [item for item in scored if item["score"] > 0]
-    return sorted(scored, key=lambda item: item["score"], reverse=True)[:top_k]
 
 
 def highlight_terms(text: str, terms: list[str]) -> str:
@@ -568,7 +508,7 @@ with retrieval_tab:
     effective_query = manual_query.strip() or selected_example.strip()
 
     if effective_query:
-        results = retrieve_from_chunks(chunks, effective_query, int(top_k))
+        results = retrieve_from_chunk_records(chunks, effective_query, int(top_k))
         st.caption(f"Retrieved {len(results)} chunks from {len(chunks)} JSONL chunks")
         if not results:
             st.warning("No matching chunks found. Try fewer words or a phrase from the source document.")

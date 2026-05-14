@@ -1,0 +1,38 @@
+[
+  {
+    "case_id": "aapl_2023_revenue_keyword",
+    "retriever_type": "keyword_jsonl",
+    "question": "What does Apple say about net sales and gross margin?",
+    "chunks_path": "data/processed/NASDAQ_AAPL_2023.chunks.latest.jsonl",
+    "top_k": 5,
+    "expected_section": "7",
+    "expected_chunk_type": "table",
+    "expected_terms_any": ["net sales", "gross margin", "revenue"],
+    "expected_terms_all": []
+  },
+  {
+    "case_id": "amzn_2022_cash_flow_keyword",
+    "retriever_type": "keyword_jsonl",
+    "question": "Where is net cash provided by operating activities reported?",
+    "chunks_path": "data/processed/NASDAQ_AMZN_2022.chunks.latest.jsonl",
+    "top_k": 5,
+    "expected_section": "7",
+    "expected_chunk_type": "table",
+    "expected_terms_any": ["operating activities", "cash flows"],
+    "expected_terms_all": ["cash"]
+  },
+  {
+    "case_id": "aapl_2023_revenue_vector",
+    "retriever_type": "vector",
+    "question": "What were the drivers of net sales?",
+    "collection_name": "findoc_nasdaq_aapl_2023",
+    "top_k": 5,
+    "expected_section": "7",
+    "expected_chunk_type": "section_text",
+    "expected_terms_any": ["net sales", "revenue", "growth"],
+    "expected_terms_all": [],
+    "metadata_filter": {
+      "section_item": "7"
+    }
+  }
+]
