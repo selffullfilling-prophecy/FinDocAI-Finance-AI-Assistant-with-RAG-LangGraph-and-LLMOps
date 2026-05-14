@@ -4,6 +4,23 @@ FinDocAI is a learning-focused finance RAG project for SEC 10-K reports. It supp
 
 > Educational and research use only. This project does not provide investment advice, recommendations, or buy/sell/hold decisions.
 
+## MVP v0.1 Freeze
+
+The current MVP is frozen as `v0.1`. See [docs/MVP_FREEZE.md](docs/MVP_FREEZE.md) for the feature boundary, known limitations, and benchmark plan.
+
+Included in v0.1:
+
+- upload, chunking, and Chroma indexing
+- vector, keyword, and hybrid retrieval
+- reranking
+- NVIDIA answer generation
+- streaming `/chat` and Streamlit demo UI
+- source attribution with `answer_status`
+- conversation memory and follow-up query rewriting
+- golden chunking, retriever, and answer evals
+
+Known limitations include heuristic table extraction, heuristic-first memory query rewriting, in-memory-only conversation state, and no MLOps/deployment/auth layer.
+
 ## Current Flow
 
 ```text
@@ -206,21 +223,27 @@ Developer Mode may still show related retrieved passages from another period, su
 
 Table chunks carry forward detected year/column headers into split table parts where possible. Source previews also prefer table context metadata, so rows such as `Total gross margin percentage 44.1% 43.3% 41.8%` remain connected to headers like `2023 2022 2021`.
 
-## Golden Evals
+## Benchmarking
 
-Chunking eval:
+FinDocAI uses two evaluation layers:
+
+- FinDocAI Golden Benchmark: domain-specific cases for 10-K chunking, retrieval, citations, answer status, table QA, negative cases, and follow-up rewriting.
+- Optional RAGAS Benchmark: computes faithfulness, answer relevancy, context precision/recall, and answer correctness when optional dependencies and evaluator credentials are available.
+
+Chunking golden eval:
+
 
 ```powershell
 python -m app.rag.eval.chunking_eval --cases tests/golden/chunking_cases.json --output data/eval/chunking_golden_report.json
 ```
 
-Retriever eval:
+Retriever golden eval:
 
 ```powershell
 python -m app.rag.eval.retriever_eval --cases tests/golden/retriever_cases.json --output data/eval/retriever_golden_report.json
 ```
 
-Answer eval is skipped by default because it may call the live NVIDIA LLM. Run it explicitly:
+Answer golden eval is skipped by default because it may call the live NVIDIA LLM. Run it explicitly:
 
 ```powershell
 $env:RUN_LLM_EVAL="1"
@@ -228,6 +251,20 @@ python -m app.rag.eval.answer_eval --cases tests/golden/answer_cases.json --outp
 ```
 
 Without `RUN_LLM_EVAL=1`, answer eval reports live cases as skipped.
+
+Optional RAGAS eval:
+
+```powershell
+pip install -r requirements-eval.txt
+$env:RUN_RAGAS_EVAL="1"
+python -m app.rag.eval.ragas_eval --cases tests/golden/ragas_cases.json --output data/eval/ragas_report.json
+```
+
+Benchmark summary:
+
+```powershell
+python -m app.rag.eval.benchmark_summary --output data/eval/benchmark_summary.md
+```
 
 ## Tests
 

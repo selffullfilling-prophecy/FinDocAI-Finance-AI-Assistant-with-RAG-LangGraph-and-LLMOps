@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.rag.answer_service import ANSWER_STATUS_INSUFFICIENT, INSUFFICIENT_CONTEXT_ANSWER, answer_question
+from app.rag.conversation_memory import memory_store
 
 
 def run_answer_golden_eval(cases_path: str | Path) -> dict[str, Any]:
@@ -23,6 +24,9 @@ def evaluate_answer_case(case: dict[str, Any]) -> dict[str, Any]:
 
     if not get_settings().nvidia_api_key:
         return _skipped(case, "NVIDIA_API_KEY is not configured; skipping live LLM answer eval.")
+
+    if case.get("turns"):
+        return evaluate_multi_turn_answer_case(case)
 
     question = str(case.get("question", "")).strip()
     collection_name = str(case.get("collection_name", "")).strip()
@@ -53,11 +57,12 @@ def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> di
     answer = str(response.get("answer", ""))
     answer_status = str(response.get("answer_status", ""))
     sources = response.get("sources", []) or []
+    debug = response.get("debug", {}) or {}
     answer_lower = answer.lower()
     issues: list[str] = []
 
-    expected_any = [str(term) for term in case.get("expected_terms_any", [])]
-    expected_all = [str(term) for term in case.get("expected_terms_all", [])]
+    expected_any = [str(term) for term in case.get("expected_final_terms_any", case.get("expected_terms_any", []))]
+    expected_all = [str(term) for term in case.get("expected_final_terms_all", case.get("expected_terms_all", []))]
     matched_any = [term for term in expected_any if term.lower() in answer_lower]
     matched_all = [term for term in expected_all if term.lower() in answer_lower]
     missing_all = [term for term in expected_all if term.lower() not in answer_lower]
@@ -88,9 +93,21 @@ def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> di
     if insufficient and sources:
         issues.append("Insufficient-context answers must not return sources.")
 
-    expected_status = case.get("expected_answer_status")
+    expected_status = case.get("expected_final_answer_status", case.get("expected_answer_status"))
+    answer_status_match = not expected_status or answer_status == expected_status
     if expected_status and answer_status != expected_status:
         issues.append(f"Expected answer_status={expected_status}, got {answer_status}.")
+
+    expected_rewrite_strategy = case.get("expected_debug_rewrite_strategy")
+    if expected_rewrite_strategy and debug.get("rewrite_strategy") != expected_rewrite_strategy:
+        issues.append(
+            f"Expected rewrite_strategy={expected_rewrite_strategy}, got {debug.get('rewrite_strategy')}."
+        )
+
+    expected_rewritten_contains = case.get("expected_rewritten_query_contains")
+    rewritten_query = str(debug.get("rewritten_query") or debug.get("retrieval_query") or "")
+    if expected_rewritten_contains and str(expected_rewritten_contains).lower() not in rewritten_query.lower():
+        issues.append(f"Rewritten query did not contain expected text: {expected_rewritten_contains}.")
 
     expected_sections = {str(item) for item in case.get("expected_source_sections", [])}
     source_sections = {str(source.get("section_item")) for source in sources if source.get("section_item") is not None}
@@ -106,14 +123,76 @@ def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> di
         "collection_name": case.get("collection_name"),
         "answer": answer,
         "answer_status": answer_status,
+        "expected_answer_status": expected_status,
         "sources": [_summarize_source(index, source) for index, source in enumerate(sources, start=1)],
         "matched_terms": sorted(set(matched_any + matched_all)),
         "missing_terms": missing_all,
         "citation_present": citation_present,
         "source_section_hit": source_section_hit,
+        "answer_status_match": answer_status_match,
+        "insufficient_handled": not insufficient or not sources,
         "term_match_rate": _term_match_rate(expected_any, expected_all, matched_any, matched_all),
+        "debug": debug,
         "issues": issues,
     }
+
+
+def evaluate_multi_turn_answer_case(case: dict[str, Any]) -> dict[str, Any]:
+    collection_name = str(case.get("collection_name", "")).strip()
+    if not collection_name:
+        return _failed(case, ["Collection name is required."])
+
+    turns = case.get("turns") or []
+    if not turns:
+        return _failed(case, ["Multi-turn case requires turns."])
+
+    session_id = str(case.get("session_id") or f"eval-{case.get('case_id', 'unknown')}")
+    memory_store.clear_session(session_id)
+    turn_outputs: list[dict[str, Any]] = []
+    final_response: dict[str, Any] | None = None
+
+    try:
+        for turn_index, turn in enumerate(turns, start=1):
+            question = str(turn.get("question", "")).strip()
+            if not question:
+                return _failed(case, [f"Turn {turn_index} question is required."])
+            final_response = answer_question(
+                question=question,
+                collection_name=collection_name,
+                top_k=int(turn.get("top_k", case.get("top_k", 5))),
+                candidate_k=int(turn.get("candidate_k", case.get("candidate_k", 20))),
+                metadata_filter=turn.get("metadata_filter", case.get("metadata_filter")),
+                retrieval_mode=turn.get("retrieval_mode", case.get("retrieval_mode", "hybrid")),
+                rerank=bool(turn.get("rerank", case.get("rerank", True))),
+                session_id=session_id,
+                use_memory=bool(case.get("use_memory", True)),
+                use_memory_for_retrieval=bool(case.get("use_memory_for_retrieval", True)),
+            )
+            turn_outputs.append(
+                {
+                    "turn": turn_index,
+                    "question": question,
+                    "answer": final_response.get("answer", ""),
+                    "answer_status": final_response.get("answer_status", ""),
+                    "sources": [
+                        _summarize_source(index, source)
+                        for index, source in enumerate(final_response.get("sources", []) or [], start=1)
+                    ],
+                    "debug": final_response.get("debug", {}),
+                }
+            )
+    except Exception as exc:
+        return _failed(case, [f"Multi-turn answer generation failed: {exc}"])
+    finally:
+        memory_store.clear_session(session_id)
+
+    if final_response is None:
+        return _failed(case, ["Multi-turn case did not produce a final response."])
+
+    result = evaluate_answer_result(case, final_response)
+    result["question"] = turns[-1].get("question", "")
+    result["turn_outputs"] = turn_outputs
+    return result
 
 
 def _build_report(case_results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -124,6 +203,17 @@ def _build_report(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     runnable = [result for result in case_results if result["status"] != "skipped"]
     citation_rate = _rate(runnable, "citation_present")
     source_section_hit_rate = _rate(runnable, "source_section_hit")
+    answer_status_accuracy = _rate(
+        [result for result in runnable if result.get("expected_answer_status")],
+        "answer_status_match",
+    )
+    insufficient_results = [
+        result
+        for result in runnable
+        if result.get("answer_status") == ANSWER_STATUS_INSUFFICIENT
+        or any("insufficient" in str(issue).lower() for issue in result.get("issues", []))
+    ]
+    insufficient_handling_rate = _rate(insufficient_results, "insufficient_handled")
     term_match_rate = (
         sum(float(result.get("term_match_rate", 0.0)) for result in runnable) / len(runnable)
         if runnable
@@ -136,6 +226,8 @@ def _build_report(case_results: list[dict[str, Any]]) -> dict[str, Any]:
         "skipped_cases": skipped,
         "citation_rate": citation_rate,
         "source_section_hit_rate": source_section_hit_rate,
+        "answer_status_accuracy": answer_status_accuracy,
+        "insufficient_handling_rate": insufficient_handling_rate,
         "term_match_rate": term_match_rate,
         "case_results": case_results,
     }
@@ -149,12 +241,16 @@ def _failed(case: dict[str, Any], issues: list[str]) -> dict[str, Any]:
         "collection_name": case.get("collection_name"),
         "answer": "",
         "answer_status": "",
+        "expected_answer_status": case.get("expected_final_answer_status", case.get("expected_answer_status")),
         "sources": [],
         "matched_terms": [],
         "missing_terms": [],
         "citation_present": False,
         "source_section_hit": False,
+        "answer_status_match": False,
+        "insufficient_handled": False,
         "term_match_rate": 0.0,
+        "debug": {},
         "issues": issues,
     }
 
@@ -212,6 +308,8 @@ def _print_summary(report: dict[str, Any]) -> None:
     print(f"- Skipped: {report['skipped_cases']}")
     print(f"- Citation rate: {report['citation_rate']:.1%}")
     print(f"- Source section hit rate: {report['source_section_hit_rate']:.1%}")
+    print(f"- Answer status accuracy: {report['answer_status_accuracy']:.1%}")
+    print(f"- Insufficient handling rate: {report['insufficient_handling_rate']:.1%}")
     print(f"- Term match rate: {report['term_match_rate']:.1%}")
 
 
