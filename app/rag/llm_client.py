@@ -5,7 +5,11 @@ from collections.abc import Iterator
 from openai import OpenAI
 
 from app.core.config import get_settings
-from app.rag.prompt_templates import RAG_SYSTEM_PROMPT
+from app.rag.prompt_templates import (
+    QUERY_REWRITE_SYSTEM_PROMPT,
+    QUERY_REWRITE_USER_PROMPT_TEMPLATE,
+    RAG_SYSTEM_PROMPT,
+)
 
 
 def generate_answer(prompt: str) -> str:
@@ -39,6 +43,34 @@ def stream_answer(prompt: str) -> Iterator[str]:
         content = getattr(delta, "content", None)
         if content:
             yield content
+
+
+def rewrite_query_with_llm(question: str, history_text: str) -> str:
+    """Rewrite a follow-up question into a standalone retrieval query."""
+
+    question = _validate_prompt(question)
+    settings = get_settings()
+    _validate_provider(settings.llm_provider)
+    _validate_api_key(settings.nvidia_api_key)
+
+    prompt = QUERY_REWRITE_USER_PROMPT_TEMPLATE.format(
+        history=history_text.strip(),
+        question=question,
+    )
+    client = _build_client(settings.nvidia_base_url, settings.nvidia_api_key)
+    completion = client.chat.completions.create(
+        model=settings.nvidia_model,
+        messages=[
+            {"role": "system", "content": QUERY_REWRITE_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.0,
+        top_p=settings.nvidia_top_p,
+        max_tokens=256,
+        stream=False,
+    )
+
+    return (completion.choices[0].message.content or "").strip()
 
 
 def _validate_prompt(prompt: str) -> str:

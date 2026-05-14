@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import queue
+import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +19,7 @@ DEFAULT_CHAT_SETTINGS = {
     "rerank": True,
     "stream": True,
     "use_memory": True,
+    "use_memory_for_retrieval": False,
     "top_k": 5,
     "candidate_k": 20,
     "section_filter": "",
@@ -30,14 +35,10 @@ EVAL_REPORTS = {
     "Retriever": Path("data/eval/retriever_golden_report.json"),
     "Answer": Path("data/eval/answer_golden_report.json"),
 }
-
-
-st.set_page_config(
-    page_title="FinDocAI",
-    page_icon="",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+WAITING_TICK_SECONDS = 0.08
+TYPEWRITER_CHAR_DELAY = 0.006
+TYPEWRITER_WORD_DELAY = 0.025
+TYPEWRITER_LONG_TEXT_THRESHOLD = 800
 
 
 def init_state() -> None:
@@ -101,10 +102,77 @@ def chat_once(base_url: str, payload: dict[str, Any]) -> dict[str, Any]:
 def stream_chat(base_url: str, payload: dict[str, Any]):
     with requests.post(f"{base_url}/chat/stream", json=payload, stream=True, timeout=180) as response:
         _raise_for_api_error(response)
-        for line in response.iter_lines(decode_unicode=True):
+        for line in response.iter_lines(chunk_size=1, decode_unicode=True):
             if not line or not line.startswith("data:"):
                 continue
-            yield json.loads(line.removeprefix("data:").strip())
+            raw_payload = line.removeprefix("data:").strip()
+            try:
+                yield json.loads(raw_payload)
+            except json.JSONDecodeError as exc:
+                yield {
+                    "type": "error",
+                    "message": "Streaming response could not be parsed.",
+                    "raw_line": raw_payload,
+                    "error": str(exc),
+                }
+
+
+def stream_chat_events_in_background(base_url: str, payload: dict[str, Any]) -> tuple[queue.Queue, threading.Thread]:
+    event_queue: queue.Queue = queue.Queue()
+
+    def worker() -> None:
+        try:
+            for event in stream_chat(base_url, payload):
+                event_queue.put(event)
+        except Exception as exc:
+            event_queue.put({"type": "error", "message": str(exc)})
+        finally:
+            event_queue.put({"type": "_stream_closed"})
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    return event_queue, thread
+
+
+def split_stream_chunk(chunk: str) -> list[str]:
+    if not chunk:
+        return []
+    if len(chunk) == 1:
+        return [chunk]
+
+    pieces = re.findall(r"\s+|\S+\s*", chunk)
+    if len(pieces) <= 1 and len(chunk) > 24:
+        return [chunk[index : index + 8] for index in range(0, len(chunk), 8)]
+    return pieces or [chunk]
+
+
+def render_with_cursor(placeholder: Any, text: str, cursor: str = "▌") -> None:
+    placeholder.markdown(text + cursor)
+
+
+def typewriter_render(
+    placeholder: Any,
+    text: str,
+    delay: float | None = None,
+    cursor: str = "▌",
+) -> None:
+    if not text:
+        placeholder.markdown("")
+        return
+
+    rendered = ""
+    if len(text) < TYPEWRITER_LONG_TEXT_THRESHOLD:
+        pieces = list(text)
+        piece_delay = TYPEWRITER_CHAR_DELAY if delay is None else delay
+    else:
+        pieces = split_stream_chunk(text)
+        piece_delay = TYPEWRITER_WORD_DELAY if delay is None else delay
+
+    for piece in pieces:
+        rendered += piece
+        render_with_cursor(placeholder, rendered, cursor=cursor)
+        time.sleep(piece_delay)
+    placeholder.markdown(text)
 
 
 def clear_memory(base_url: str, session_id: str) -> None:
@@ -154,6 +222,7 @@ def make_chat_payload(question: str, settings: dict[str, Any]) -> dict[str, Any]
         "rerank": settings["rerank"],
         "session_id": settings["session_id"],
         "use_memory": settings["use_memory"],
+        "use_memory_for_retrieval": settings["use_memory_for_retrieval"],
         "metadata_filter": build_metadata_filter(settings["section_filter"]),
     }
 
@@ -175,6 +244,7 @@ def render_sidebar() -> tuple[bool, bool, dict[str, Any]]:
                 rerank = st.checkbox("rerank", value=True)
                 stream = st.checkbox("stream", value=True)
                 use_memory = st.checkbox("memory", value=True)
+                use_memory_for_retrieval = st.checkbox("use memory for retrieval", value=False)
                 top_k = st.slider("top_k", 1, 20, DEFAULT_CHAT_SETTINGS["top_k"])
                 candidate_k = st.slider("candidate_k", 1, 50, DEFAULT_CHAT_SETTINGS["candidate_k"])
                 section_filter = st.text_input("section filter", value="")
@@ -185,6 +255,7 @@ def render_sidebar() -> tuple[bool, bool, dict[str, Any]]:
             rerank = DEFAULT_CHAT_SETTINGS["rerank"]
             stream = DEFAULT_CHAT_SETTINGS["stream"]
             use_memory = DEFAULT_CHAT_SETTINGS["use_memory"]
+            use_memory_for_retrieval = DEFAULT_CHAT_SETTINGS["use_memory_for_retrieval"]
             top_k = DEFAULT_CHAT_SETTINGS["top_k"]
             candidate_k = DEFAULT_CHAT_SETTINGS["candidate_k"]
             section_filter = DEFAULT_CHAT_SETTINGS["section_filter"]
@@ -224,6 +295,7 @@ def render_sidebar() -> tuple[bool, bool, dict[str, Any]]:
         "rerank": rerank,
         "stream": stream,
         "use_memory": use_memory,
+        "use_memory_for_retrieval": use_memory_for_retrieval,
         "top_k": top_k,
         "candidate_k": candidate_k,
         "section_filter": section_filter,
@@ -368,8 +440,8 @@ def submit_question(question: str, settings: dict[str, Any], developer_mode: boo
 
         if answer_status == "insufficient_context":
             st.warning("I could not find enough information in the uploaded document.")
-        elif not settings["stream"]:
-            st.markdown(answer)
+        elif not settings["stream"] and not raw_response.get("error"):
+            typewriter_render(st.empty(), answer)
         if answer_status == "unverified_sources":
             st.warning("This answer did not include verified citations.")
         if answer_status == "answered" and sources:
@@ -390,35 +462,106 @@ def submit_question(question: str, settings: dict[str, Any], developer_mode: boo
 
 
 def run_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+    status_placeholder = st.empty()
     answer_placeholder = st.empty()
     answer = ""
     sources: list[dict[str, Any]] = []
     raw_events: list[dict[str, Any]] = []
     metadata: dict[str, Any] = {}
+    current_status = "Retrieving context"
+    dot_count = 0
+    received_any_token = False
+    stream_done = False
 
     try:
-        for event in stream_chat(api_url(), payload):
+        status_placeholder.info("Retrieving relevant context...")
+        event_queue, thread = stream_chat_events_in_background(api_url(), payload)
+        while True:
+            try:
+                event = event_queue.get(timeout=WAITING_TICK_SECONDS)
+            except queue.Empty:
+                if not received_any_token:
+                    dots = "." * ((dot_count % 3) + 1)
+                    status_placeholder.info(f"{current_status}{dots}")
+                    dot_count += 1
+                continue
+
             raw_events.append(event)
             event_type = event.get("type")
-            if event_type == "token":
-                answer += event.get("content", "")
-                answer_placeholder.markdown(answer)
+            if event_type == "status":
+                message = event.get("message", "Working...")
+                current_status = message.rstrip(".")
+                status_placeholder.info(message)
+            elif event_type == "token":
+                received_any_token = True
+                status_placeholder.empty()
+                for piece in split_stream_chunk(event.get("content", "")):
+                    answer += piece
+                    render_with_cursor(answer_placeholder, answer)
+                    time.sleep(TYPEWRITER_WORD_DELAY)
             elif event_type == "metadata":
                 metadata = event
             elif event_type == "sources":
                 sources = event.get("sources", [])
             elif event_type == "error":
                 raise RuntimeError(event.get("message", "Streaming failed."))
+            elif event_type == "done":
+                stream_done = True
+                break
+            elif event_type == "_stream_closed":
+                if stream_done:
+                    break
+                if not thread.is_alive():
+                    break
     except Exception as exc:
-        message = friendly_error(exc, developer_mode)
-        st.error(message)
-        if developer_mode:
-            st.exception(exc)
-        return message, [], {"error": str(exc), "events": raw_events, "answer_status": "unverified_sources"}
+        status_placeholder.empty()
+        stream_error = str(exc)
+        answer_placeholder.info("Streaming failed. Trying regular response...")
+        try:
+            result = chat_once(api_url(), payload)
+        except Exception as fallback_exc:
+            message = friendly_error(fallback_exc, developer_mode)
+            answer_placeholder.error(message)
+            if developer_mode:
+                st.exception(fallback_exc)
+            return (
+                message,
+                [],
+                {
+                    "error": str(fallback_exc),
+                    "stream_error": stream_error,
+                    "events": raw_events,
+                    "answer_status": "unverified_sources",
+                },
+            )
 
+        answer = result.get("answer", "")
+        sources = result.get("sources", [])
+        answer_status = result.get("answer_status") or classify_ui_answer_status(answer, sources)
+        if answer_status == "insufficient_context":
+            answer_placeholder.empty()
+        else:
+            typewriter_render(answer_placeholder, answer)
+        return (
+            answer,
+            sources,
+            {
+                **result,
+                "events": raw_events,
+                "stream_error": stream_error,
+                "stream_fallback": True,
+            },
+        )
+
+    status_placeholder.empty()
     answer_status = metadata.get("answer_status") or classify_ui_answer_status(answer, sources)
     if answer_status == "insufficient_context":
         answer_placeholder.empty()
+    elif answer:
+        answer_placeholder.markdown(answer)
+    else:
+        answer = "No answer was generated."
+        answer_placeholder.warning(answer)
 
     return (
         answer,
@@ -478,9 +621,10 @@ def render_sources(sources: list[dict[str, Any]], developer_mode: bool) -> None:
 
     st.markdown("**Sources**")
     for index, source in enumerate(sources, start=1):
+        source_number = source.get("source_number") or index
         section_item = source.get("section_item") or "UNKNOWN"
         section_title = source.get("section_title") or "Untitled section"
-        label = f"Source {index}: Item {section_item} - {section_title}"
+        label = f"Source {source_number}: Item {section_item} - {section_title}"
         with st.expander(label, expanded=index == 1):
             cols = st.columns(3)
             cols[0].write(f"Section: `Item {section_item}`")
@@ -498,10 +642,11 @@ def render_related_context(retrieved_context: list[dict[str, Any]]) -> None:
 
     st.markdown("**Related retrieved passages**")
     for index, source in enumerate(retrieved_context, start=1):
+        source_number = source.get("source_number") or index
         section_item = source.get("section_item") or "UNKNOWN"
         section_title = source.get("section_title") or "Untitled section"
         with st.expander(
-            f"Retrieved {index}: Item {section_item} - {section_title}",
+            f"Retrieved context {source_number}: Item {section_item} - {section_title}",
             expanded=False,
         ):
             st.write(f"chunk_id: `{source.get('chunk_id')}`")
@@ -637,10 +782,22 @@ def load_report(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-init_state()
-healthy, developer_mode, settings = render_sidebar()
+def main() -> None:
+    st.set_page_config(
+        page_title="FinDocAI",
+        page_icon="",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
-if developer_mode:
-    render_developer_mode(healthy, settings)
-else:
-    render_user_mode(healthy, settings)
+    init_state()
+    healthy, developer_mode, settings = render_sidebar()
+
+    if developer_mode:
+        render_developer_mode(healthy, settings)
+    else:
+        render_user_mode(healthy, settings)
+
+
+if __name__ == "__main__":
+    main()

@@ -12,6 +12,7 @@ from app.rag.conversation_memory import memory_store, normalize_session_id
 from app.rag.hybrid_retriever import RetrievedCandidate, retrieve_candidates
 from app.rag.llm_client import generate_answer, stream_answer
 from app.rag.prompt_builder import build_rag_prompt
+from app.rag.query_rewriter import build_retrieval_query
 from app.rag.reranker import candidates_to_ranked_documents, rerank_candidates
 
 
@@ -44,13 +45,19 @@ def answer_question(
     rerank: bool = True,
     session_id: str | None = None,
     use_memory: bool = True,
+    use_memory_for_retrieval: bool = False,
 ) -> dict[str, Any]:
     """Answer a question using retrieved chunks from a Chroma collection."""
 
     question, collection_name = _validate_inputs(question, collection_name)
     normalized_session_id = normalize_session_id(session_id)
     history_text = memory_store.build_history_text(normalized_session_id) if use_memory else ""
-    retrieval_query = _build_retrieval_query(question, normalized_session_id, use_memory)
+    retrieval_query, rewrite_debug = build_retrieval_query(
+        question=question,
+        session_id=normalized_session_id,
+        use_memory=use_memory,
+        use_memory_for_retrieval=use_memory_for_retrieval,
+    )
     candidates = retrieve_candidates(
         query=retrieval_query,
         collection_name=collection_name,
@@ -59,7 +66,7 @@ def answer_question(
         retrieval_mode=retrieval_mode,
     )
     retrieved_chunks = _select_retrieved_chunks(
-        query=question,
+        query=retrieval_query,
         candidates=candidates,
         top_k=top_k,
         metadata_filter=metadata_filter,
@@ -80,7 +87,7 @@ def answer_question(
             "session_id": normalized_session_id,
             "sources": [],
             "retrieved_context": [],
-            "debug": {"retrieval_query": retrieval_query, "candidate_count": len(candidates)},
+            "debug": {"candidate_count": len(candidates), **rewrite_debug},
         }
 
     settings = get_settings()
@@ -110,9 +117,9 @@ def answer_question(
         "sources": sources,
         "retrieved_context": retrieved_context,
         "debug": {
-            "retrieval_query": retrieval_query,
             "candidate_count": len(candidates),
             "cited_source_numbers": sorted(cited_numbers),
+            **rewrite_debug,
             **citation_debug,
         },
     }
@@ -128,11 +135,22 @@ def stream_answer_question(
     rerank: bool = True,
     session_id: str | None = None,
     use_memory: bool = True,
+    use_memory_for_retrieval: bool = False,
 ) -> Iterator[dict[str, Any]]:
     question, collection_name = _validate_inputs(question, collection_name)
     normalized_session_id = normalize_session_id(session_id)
     history_text = memory_store.build_history_text(normalized_session_id) if use_memory else ""
-    retrieval_query = _build_retrieval_query(question, normalized_session_id, use_memory)
+    yield {
+        "type": "status",
+        "stage": "retrieving",
+        "message": "Retrieving relevant context...",
+    }
+    retrieval_query, rewrite_debug = build_retrieval_query(
+        question=question,
+        session_id=normalized_session_id,
+        use_memory=use_memory,
+        use_memory_for_retrieval=use_memory_for_retrieval,
+    )
     candidates = retrieve_candidates(
         query=retrieval_query,
         collection_name=collection_name,
@@ -141,7 +159,7 @@ def stream_answer_question(
         retrieval_mode=retrieval_mode,
     )
     retrieved_chunks = _select_retrieved_chunks(
-        query=question,
+        query=retrieval_query,
         candidates=candidates,
         top_k=top_k,
         metadata_filter=metadata_filter,
@@ -156,12 +174,17 @@ def stream_answer_question(
             "type": "metadata",
             "answer_status": ANSWER_STATUS_INSUFFICIENT,
             "retrieved_context": [],
-            "debug": {"retrieval_query": retrieval_query, "candidate_count": len(candidates)},
+            "debug": {"candidate_count": len(candidates), **rewrite_debug},
         }
         yield {"type": "sources", "sources": []}
         yield {"type": "done"}
         return
 
+    yield {
+        "type": "status",
+        "stage": "generating",
+        "message": "Generating answer...",
+    }
     settings = get_settings()
     prompt = build_rag_prompt(
         question,
@@ -187,9 +210,9 @@ def stream_answer_question(
         "answer_status": answer_status,
         "retrieved_context": retrieved_context,
         "debug": {
-            "retrieval_query": retrieval_query,
             "candidate_count": len(candidates),
             "cited_source_numbers": sorted(cited_numbers),
+            **rewrite_debug,
             **citation_debug,
         },
     }
@@ -203,12 +226,13 @@ def format_source_chunks(
     """Convert retrieved LangChain documents into API source payloads."""
 
     sources: list[dict[str, Any]] = []
-    for document, score in retrieved_chunks:
+    for source_number, (document, score) in enumerate(retrieved_chunks, start=1):
         metadata = document.metadata or {}
         page_start = _as_int_or_none(metadata.get("page_start") or metadata.get("page_number"))
         page_end = _as_int_or_none(metadata.get("page_end") or page_start)
         sources.append(
             {
+                "source_number": source_number,
                 "chunk_id": _as_str_or_none(metadata.get("chunk_id")),
                 "section_item": _as_str_or_none(metadata.get("section_item")),
                 "section_title": _as_str_or_none(metadata.get("section_title")),
@@ -219,7 +243,7 @@ def format_source_chunks(
                 "vector_score": _as_float_or_none(metadata.get("vector_score")),
                 "keyword_score": _as_float_or_none(metadata.get("keyword_score")),
                 "final_score": _as_float_or_none(metadata.get("final_score") or score),
-                "preview": _preview(document.page_content),
+                "preview": _source_preview(document),
             }
         )
     return sources
@@ -264,7 +288,9 @@ def filter_cited_sources_with_debug(
         seen.add(source_number)
         index = source_number - 1
         if 0 <= index < len(all_context_sources):
-            cited_sources.append(all_context_sources[index])
+            source = dict(all_context_sources[index])
+            source["source_number"] = source_number
+            cited_sources.append(source)
         else:
             invalid_citations.append(source_number)
 
@@ -293,16 +319,6 @@ def _validate_inputs(question: str, collection_name: str) -> tuple[str, str]:
     if not collection_name:
         raise ValueError("Collection name is required.")
     return question, collection_name
-
-
-def _build_retrieval_query(question: str, session_id: str, use_memory: bool) -> str:
-    if not use_memory:
-        return question
-    turns = memory_store.get_recent_history(session_id, max_turns=4)
-    if not turns:
-        return question
-    history = "\n".join(f"{turn.role}: {_preview(turn.content, 300)}" for turn in turns)
-    return f"{history}\ncurrent question: {question}"
 
 
 def _select_retrieved_chunks(
@@ -335,6 +351,22 @@ def _preview(text: str, max_length: int = 280) -> str:
     if len(normalized) <= max_length:
         return normalized
     return normalized[: max_length - 3].rstrip() + "..."
+
+
+def _source_preview(document: Document) -> str:
+    metadata = document.metadata or {}
+    table_context = metadata.get("table_context")
+    if table_context:
+        return _preview(str(table_context), 700)
+
+    table_headers = metadata.get("table_headers")
+    if table_headers and metadata.get("chunk_type") == "table":
+        header_text = str(table_headers)
+        content = document.page_content
+        if header_text not in content:
+            return _preview(f"{header_text}\n{content}", 700)
+
+    return _preview(document.page_content)
 
 
 def _as_str_or_none(value: object) -> str | None:

@@ -3,6 +3,7 @@ from langchain_core.documents import Document
 from app.rag import answer_service
 from app.rag.conversation_memory import memory_store
 from app.rag.hybrid_retriever import RetrievedCandidate
+from app.rag.query_rewriter import is_follow_up_question
 
 
 def _document(chunk_id: str = "item-7-text-001", content: str | None = None) -> Document:
@@ -134,6 +135,7 @@ def test_answer_question_cited_answer_returns_only_supporting_sources(monkeypatc
     assert "What drove net sales?" in calls["prompt"]
     assert result["answer_status"] == "answered"
     assert result["answer"].endswith("[Source 1]")
+    assert result["sources"][0]["source_number"] == 1
     assert result["sources"][0]["chunk_id"] == "item-7-text-001"
     assert result["sources"][0]["section_item"] == "7"
     assert result["sources"][0]["score"] == 1.23
@@ -183,6 +185,7 @@ def test_cited_source_filtering_returns_only_cited_context_source(monkeypatch):
 
     assert result["answer_status"] == "answered"
     assert len(result["sources"]) == 1
+    assert result["sources"][0]["source_number"] == 2
     assert result["sources"][0]["chunk_id"] == "source-2"
     assert len(result["retrieved_context"]) == 3
 
@@ -256,7 +259,17 @@ def test_stream_answer_question_yields_metadata_sources_done(monkeypatch):
         )
     )
 
-    assert events[0] == {"type": "token", "content": "Answer [Source 1]"}
+    assert events[0] == {
+        "type": "status",
+        "stage": "retrieving",
+        "message": "Retrieving relevant context...",
+    }
+    assert events[1] == {
+        "type": "status",
+        "stage": "generating",
+        "message": "Generating answer...",
+    }
+    assert events[2] == {"type": "token", "content": "Answer [Source 1]"}
     assert events[-3]["type"] == "metadata"
     assert events[-3]["answer_status"] == "answered"
     assert events[-2]["type"] == "sources"
@@ -304,3 +317,89 @@ def test_format_source_chunks_uses_page_number_fallback_and_truncates_preview():
     assert sources[0]["score"] is None
     assert len(sources[0]["preview"]) <= 280
     assert sources[0]["preview"].endswith("...")
+
+
+def test_format_source_chunks_uses_table_context_for_preview():
+    document = Document(
+        page_content="Total gross margin percentage 44.1% 43.3% 41.8%",
+        metadata={
+            "chunk_id": "item-7-table-009",
+            "section_item": "7",
+            "chunk_type": "table",
+            "page_number": 24,
+            "table_context": (
+                "2023 2022 2021\n"
+                "Total gross margin percentage: 2023 44.1%, 2022 43.3%, 2021 41.8%"
+            ),
+        },
+    )
+
+    sources = answer_service.format_source_chunks([(document, 0.4)])
+
+    assert sources[0]["preview"].startswith("2023 2022 2021")
+    assert "44.1%" in sources[0]["preview"]
+
+
+def test_standalone_question_with_memory_retrieves_only_current_question(monkeypatch):
+    session_id = "unit-test-standalone"
+    memory_store.clear_session(session_id)
+    memory_store.add_user_message(session_id, "What was Apple's weighted average interest rate in 2024?")
+    calls = {}
+
+    def fake_retrieve_candidates(query, **kwargs):
+        calls["query"] = query
+        return [_candidate()]
+
+    monkeypatch.setattr(answer_service, "retrieve_candidates", fake_retrieve_candidates)
+    monkeypatch.setattr(answer_service, "generate_answer", lambda prompt: "Answer. [Source 1]")
+
+    answer_service.answer_question(
+        "What was Apple's gross margin percentage in 2023?",
+        "test_collection",
+        session_id=session_id,
+        use_memory=True,
+        use_memory_for_retrieval=False,
+    )
+
+    assert calls["query"] == "What was Apple's gross margin percentage in 2023?"
+    memory_store.clear_session(session_id)
+
+
+def test_follow_up_uses_history_only_when_enabled(monkeypatch):
+    session_id = "unit-test-follow-up"
+    memory_store.clear_session(session_id)
+    memory_store.add_user_message(session_id, "What was Apple's gross margin percentage in 2023?")
+    calls = []
+
+    def fake_retrieve_candidates(query, **kwargs):
+        calls.append(query)
+        return [_candidate()]
+
+    monkeypatch.setattr(answer_service, "retrieve_candidates", fake_retrieve_candidates)
+    monkeypatch.setattr(answer_service, "generate_answer", lambda prompt: "Answer. [Source 1]")
+
+    answer_service.answer_question(
+        "What about 2022?",
+        "test_collection",
+        session_id=session_id,
+        use_memory=True,
+        use_memory_for_retrieval=False,
+    )
+    memory_store.clear_session(session_id)
+    memory_store.add_user_message(session_id, "What was Apple's gross margin percentage in 2023?")
+    answer_service.answer_question(
+        "What about 2022?",
+        "test_collection",
+        session_id=session_id,
+        use_memory=True,
+        use_memory_for_retrieval=True,
+    )
+
+    assert calls[0] == "What about 2022?"
+    assert calls[1] == "What was Apple's gross margin percentage in 2022?"
+    memory_store.clear_session(session_id)
+
+
+def test_is_follow_up_question_false_for_standalone_metric_year_question():
+    assert is_follow_up_question("What was Apple's gross margin percentage in 2023?") is False
+    assert is_follow_up_question("What about 2022?") is True

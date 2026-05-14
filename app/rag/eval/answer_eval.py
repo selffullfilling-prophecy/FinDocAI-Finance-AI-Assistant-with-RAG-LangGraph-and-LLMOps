@@ -168,6 +168,7 @@ def _skipped(case: dict[str, Any], message: str) -> dict[str, Any]:
 def _summarize_source(index: int, source: dict[str, Any]) -> dict[str, Any]:
     return {
         "rank": index,
+        "source_number": source.get("source_number"),
         "chunk_id": source.get("chunk_id"),
         "section_item": source.get("section_item"),
         "chunk_type": source.get("chunk_type"),

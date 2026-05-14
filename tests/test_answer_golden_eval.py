@@ -21,7 +21,7 @@ def _response(answer="Net sales grew because of iPhone. [Source 1]", answer_stat
     return {
         "answer": answer,
         "answer_status": answer_status,
-        "sources": sources if sources is not None else [{"chunk_id": "c1", "section_item": "7", "chunk_type": "section_text"}],
+        "sources": sources if sources is not None else [{"source_number": 3, "chunk_id": "c1", "section_item": "7", "chunk_type": "section_text"}],
         "retrieved_context": [{"chunk_id": "related", "section_item": "1A"}],
     }
 
@@ -32,6 +32,7 @@ def test_answer_eval_expected_term_match_passes():
     assert result["status"] == "passed"
     assert result["citation_present"] is True
     assert result["source_section_hit"] is True
+    assert result["sources"][0]["source_number"] == 3
 
 
 def test_answer_eval_missing_citation_fails():
