@@ -1,46 +1,192 @@
-# FinDocAI - 10-K RAG Assistant
+# FinDocAI — Financial Document RAG Assistant
 
-FinDocAI is a learning-focused finance RAG project for SEC 10-K reports. It supports upload, section/table-aware chunking, Chroma indexing, hybrid retrieval, reranking, answer generation with citations, Streamlit demo UI, and golden evals.
+A learning-focused MVP for question answering over SEC 10-K financial reports using RAG, hybrid retrieval, reranking, source attribution, conversation memory, streaming UI, and evaluation benchmarks.
 
-> Educational and research use only. This project does not provide investment advice, recommendations, or buy/sell/hold decisions.
+This project is for educational and research use only. It does not provide investment advice, recommendations, or buy/sell/hold decisions.
 
-## MVP v0.1 Freeze
+## 1. Project Scope
 
-The current MVP is frozen as `v0.1`. See [docs/MVP_FREEZE.md](docs/MVP_FREEZE.md) for the feature boundary, known limitations, and benchmark plan.
+FinDocAI is an MVP for document-grounded question answering over financial reports. The main target document type is SEC 10-K reports, where the system can ingest a filing, chunk it with 10-K structure awareness, index it into Chroma, retrieve relevant evidence, and generate grounded answers with citations.
 
-Included in v0.1:
+The goal is not to replace ChatGPT, financial research platforms, or professional analysis tools. The goal is to demonstrate an end-to-end financial RAG pipeline that is inspectable, testable, and suitable for learning or portfolio review.
 
-- upload, chunking, and Chroma indexing
-- vector, keyword, and hybrid retrieval
-- reranking
-- NVIDIA answer generation
-- streaming `/chat` and Streamlit demo UI
-- source attribution with `answer_status`
-- conversation memory and follow-up query rewriting
-- golden chunking, retriever, and answer evals
+FinDocAI is not production-ready and is not a financial advisor.
 
-Known limitations include heuristic table extraction, heuristic-first memory query rewriting, in-memory-only conversation state, and no MLOps/deployment/auth layer.
+## 2. Key Features
 
-## Current Flow
+- PDF/TXT upload.
+- 10-K-aware document processing.
+- SEC item and section detection.
+- Table-aware chunking with heuristic table context/header carry-forward.
+- `chunks.jsonl` artifact generation.
+- Chroma vector indexing.
+- `sentence-transformers` embeddings.
+- Vector, keyword, and hybrid retrieval.
+- Heuristic reranking.
+- NVIDIA LLM through an OpenAI-compatible API.
+- Grounded prompt guardrails.
+- `answer_status` values:
+  - `answered`
+  - `insufficient_context`
+  - `unverified_sources`
+- Source attribution policy:
+  - `retrieved_context != sources`
+  - `sources` only come from valid `[Source N]` citations.
+- Conversation memory.
+- Query rewriting for follow-up questions.
+- `/chat` and `/chat/stream` APIs.
+- Streamlit UI with User Mode and Developer Mode.
+- Typewriter-like streaming UI.
+- Golden chunking, retriever, and answer eval.
+- Optional RAGAS benchmark.
+- Benchmark summary markdown report.
+
+## 3. End-to-End System Architecture
+
+FinDocAI has one end-to-end RAG flow with three connected paths.
+
+Upload / indexing path:
 
 ```text
-10-K PDF/TXT
--> load pages
--> detect 10-K sections
--> split section/table chunks
--> write chunk JSONL + chunk eval
--> index chunks into Chroma
--> retrieve candidates by vector / keyword / hybrid
--> optional heuristic reranking
--> build grounded RAG prompt
--> NVIDIA LLM answer
--> answer + source citations
+User
+-> Streamlit UI
+-> FastAPI /upload
+-> Loader
+-> 10-K structure detection
+-> Table-aware chunking
+-> Metadata attachment
+-> chunks.jsonl
+-> Embedding model
+-> Chroma vector store
 ```
 
-## Setup
+Chat / answering path:
+
+```text
+User question
+-> Streamlit UI
+-> FastAPI /chat or /chat/stream
+-> Conversation memory
+-> Query rewriter
+-> Hybrid retriever
+-> Vector + keyword retrieval from Chroma
+-> Heuristic reranker
+-> Prompt builder
+-> NVIDIA LLM
+-> Source attribution
+-> Answer status
+-> JSON or SSE response
+-> Streamlit UI
+```
+
+Evaluation path:
+
+```text
+Golden chunking eval
++ Golden retriever eval
++ Golden answer eval
++ Optional RAGAS eval
+-> Benchmark summary
+```
+
+```mermaid
+flowchart TD
+    U[User] --> UI[Streamlit UI]
+
+    UI -->|Upload PDF/TXT| UP[FastAPI /upload]
+    UP --> L[Loader]
+    L --> S[10-K structure detection]
+    S --> C[Table-aware chunking]
+    C --> M[Metadata attachment]
+    M --> A[chunks.jsonl artifacts]
+    M --> E[Embedding model]
+    E --> DB[(Chroma vector store)]
+
+    UI -->|Question| CH[FastAPI /chat or /chat/stream]
+    CH --> MEM[Conversation memory]
+    MEM --> QR[Query rewriter]
+    QR --> HR[Hybrid retriever]
+    HR --> DB
+    DB --> RR[Heuristic reranker]
+    RR --> PB[Prompt builder]
+    PB --> LLM[NVIDIA LLM]
+    LLM --> SA[Source attribution]
+    SA --> AS[Answer status]
+    AS --> RESP[JSON or SSE response]
+    RESP --> UI
+
+    GE[Golden evals] --> BS[Benchmark summary]
+    RA[Optional RAGAS eval] --> BS
+    DB --> GE
+    RESP --> GE
+```
+
+<!-- Optional: add system architecture image here, e.g. docs/assets/system_architecture.png -->
+
+## 4. Source Attribution Policy
+
+FinDocAI separates retrieval context from supporting sources:
+
+- `retrieved_context` is the top-k context sent to the LLM. It is mainly for debugging and Developer Mode.
+- `sources` contains only chunks explicitly cited by the answer using valid `[Source N]` citations.
+- If the answer says there is insufficient context:
+  - `answer_status = "insufficient_context"`
+  - `sources = []`
+- If the answer makes claims but has no valid citation:
+  - `answer_status = "unverified_sources"`
+  - `sources = []`
+- `source_number` is preserved, so an answer citation such as `[Source 3]` renders as `Source 3` in the UI.
+- User Mode only displays supporting sources.
+- Developer Mode may show `retrieved_context` as related retrieved passages.
+
+Example:
+
+```json
+{
+  "answer_status": "insufficient_context",
+  "sources": []
+}
+```
+
+## 5. Conversation Memory & Query Rewriting
+
+Conversation memory is in-memory per `session_id`.
+
+- `use_memory=true` allows recent turns to be included in the answer prompt.
+- `use_memory_for_retrieval=false` by default. This prevents unrelated previous questions from polluting retrieval for a new standalone question.
+- For follow-up questions such as `How about Services?`, the system can rewrite the query into a standalone retrieval query when memory retrieval is enabled.
+- Query rewriting is heuristic-first, with optional LLM fallback.
+- This is useful for the demo, but it is not a production-grade conversational planner.
+
+Example:
+
+```text
+Previous question:
+What was Apple's gross margin percentage in 2023?
+
+Follow-up:
+How about Services?
+
+Rewritten retrieval query:
+What was Apple's Services gross margin percentage in 2023?
+```
+
+## 6. Table Handling
+
+FinDocAI includes table-aware chunking and table context enrichment. It attempts to keep table headers and year columns connected with split table rows, which helps answer questions such as:
+
+```text
+What was Apple's gross margin percentage in 2023?
+```
+
+The table handling is heuristic. It is useful for selected MVP benchmark cases, but it is not production-grade and should be evaluated on more filings before relying on it for broad table QA.
+
+## 7. Setup
+
+PowerShell:
 
 ```powershell
-cd C:\Users\Admin\Documents\findocAI
+cd <repo>
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
@@ -69,11 +215,11 @@ RERANK_ENABLED=true
 RERANK_TOP_K=5
 ```
 
-The first Chroma indexing run may download the embedding model if it is not cached.
+The first embedding/indexing run may download the `sentence-transformers` model.
 
-## Run
+## 8. Run the MVP Demo
 
-Start FastAPI:
+Start the backend:
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -85,67 +231,41 @@ Start Streamlit:
 streamlit run frontend/streamlit_app.py
 ```
 
-Open:
-
-```text
-http://127.0.0.1:8501
-```
-
 Demo workflow:
 
-1. Open `Upload & Index`.
-2. Upload a 10-K PDF/TXT.
-3. Keep `Index into Chroma` enabled.
-4. Copy or use the returned `collection_name`.
-5. Open `Retriever Debug` to compare `vector`, `keyword`, and `hybrid`.
-6. Open `Chat with Document`.
-7. Ask questions with streaming on and inspect sources.
+1. Open the Streamlit UI.
+2. Upload a 10-K PDF or TXT.
+3. Click `Process document`.
+4. Wait until the document is ready.
+5. Ask questions in chat.
+6. Inspect the answer and sources.
+7. Turn on Developer Mode to inspect raw JSON, retrieved context, and benchmark reports.
 
-## API
+## 9. API Endpoints
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health check |
-| `POST` | `/upload` | Upload, chunk, eval, optionally index into Chroma |
-| `POST` | `/retrieve` | Debug retrieval with vector/keyword/hybrid and optional rerank |
+| `POST` | `/upload` | Upload, chunk, evaluate chunks, and optionally index into Chroma |
+| `POST` | `/retrieve` | Debug retrieval with vector, keyword, hybrid, and reranking options |
 | `POST` | `/chat` | Non-streaming RAG answer generation |
-| `POST` | `/chat/stream` | Streaming RAG answer generation as SSE |
+| `POST` | `/chat/stream` | Streaming RAG answer generation as Server-Sent Events |
 | `GET` | `/chat/sessions/{session_id}` | Read recent in-memory chat history |
 | `DELETE` | `/chat/sessions/{session_id}` | Clear in-memory chat history |
 
-Upload and index:
+Upload:
 
 ```powershell
 curl.exe -X POST "http://127.0.0.1:8000/upload" `
-  -F "file=@C:\Users\Admin\Documents\findocAI\data\images\raw\reports\NASDAQ_AAPL_2023.pdf" `
+  -F "file=@path\to\NASDAQ_AAPL_2023.pdf" `
   -F "index_to_chroma=true"
-```
-
-Retriever debug:
-
-```powershell
-$body = @{
-  question = "What were the drivers of net sales?"
-  collection_name = "findoc_nasdaq_aapl_2023"
-  retrieval_mode = "hybrid"
-  rerank = $true
-  top_k = 5
-  candidate_k = 20
-  with_score = $true
-} | ConvertTo-Json -Compress
-
-Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/retrieve" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body $body
 ```
 
 Chat:
 
 ```powershell
 $body = @{
-  question = "What were the drivers of net sales?"
+  question = "What were Apple's total net sales and net income in 2023?"
   collection_name = "findoc_nasdaq_aapl_2023"
   retrieval_mode = "hybrid"
   rerank = $true
@@ -163,116 +283,83 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-## Retrieval Modes
-
-`vector` uses Chroma similarity search with embedding scores.
-
-`keyword` reads documents from the Chroma collection and scores query terms deterministically.
-
-`hybrid` merges vector and keyword candidates by `chunk_id`, normalizes scores, and computes:
-
-```text
-hybrid_score = 0.65 * vector_norm + 0.35 * keyword_norm
-```
-
-## Reranking
-
-The default reranker is deterministic and does not load an external model. It boosts:
-
-- exact query term matches
-- metadata section filters
-- table chunks for cash flow / statement / balance sheet questions
-- Item 7 for revenue, net sales, growth, margin, MD&A questions
-- Item 8 for cash flow, assets, liabilities, consolidated statement questions
-
-## Conversation Memory
-
-Chat memory is in-memory per `session_id`. It stores recent user/assistant turns and sources. It is useful for the demo, but it is not a production database-backed memory layer.
-
-By default, conversation history is used in the answer prompt but not in the retrieval query. This avoids a previous independent question, such as an interest-rate question, polluting retrieval for a later standalone question about gross margin. Set `use_memory_for_retrieval=true` only when testing follow-up questions such as "What about 2022?"
-
-Clear memory:
+Streaming:
 
 ```powershell
-Invoke-RestMethod -Method Delete -Uri "http://127.0.0.1:8000/chat/sessions/demo-session"
+curl.exe -N -X POST "http://127.0.0.1:8000/chat/stream" `
+  -H "Content-Type: application/json" `
+  -d "{\"question\":\"What were Apple's total net sales and net income in 2023?\",\"collection_name\":\"findoc_nasdaq_aapl_2023\",\"retrieval_mode\":\"hybrid\",\"rerank\":true,\"top_k\":5,\"candidate_k\":20}"
 ```
 
-## Source Attribution Policy
+## 10. Retrieval Modes
 
-FinDocAI separates retrieval context from cited sources:
+- `vector`: semantic search using embeddings and Chroma.
+- `keyword`: deterministic term matching over stored chunks.
+- `hybrid`: merges vector and keyword candidates.
+- `reranking`: heuristic reranker boosts relevant sections and tables based on query terms and metadata.
 
-- `retrieved_context` is the top-k context sent to the LLM. These passages are useful for Developer Mode and debugging.
-- `sources` contains only the chunks explicitly cited by the answer with valid `[Source N]` citations.
-- Each returned source preserves its original `source_number`, so an answer citation like `[Source 3]` renders as `Source 3` in the UI.
-- If the answer is insufficient, `answer_status = "insufficient_context"` and `sources = []`.
-- If the answer makes claims without valid citations, `answer_status = "unverified_sources"` and `sources = []`.
-- User Mode displays only supporting `sources`.
-- Developer Mode may show `retrieved_context` as related retrieved passages, but they are not called sources.
+## 11. Benchmarking
 
-Example:
+FinDocAI has two benchmark layers.
 
-```json
-{
-  "question": "What was Apple's weighted average interest rate in 2024?",
-  "answer_status": "insufficient_context",
-  "sources": []
-}
-```
+### A. FinDocAI Golden Benchmark
 
-Developer Mode may still show related retrieved passages from another period, such as 2023, for debugging. Those passages are not treated as sources unless the answer cites them directly and they support the specific claim.
+The domain-specific benchmark checks:
 
-Table chunks carry forward detected year/column headers into split table parts where possible. Source previews also prefer table context metadata, so rows such as `Total gross margin percentage 44.1% 43.3% 41.8%` remain connected to headers like `2023 2022 2021`.
+- chunk quality
+- retriever hit/source behavior
+- `answer_status`
+- citations
+- cited source sections
+- insufficient context behavior
+- expected terms
+- forbidden terms
+- multi-turn query rewriting
 
-## Benchmarking
+### B. Optional RAGAS Benchmark
 
-FinDocAI uses two evaluation layers:
+The optional RAGAS benchmark can evaluate:
 
-- FinDocAI Golden Benchmark: domain-specific cases for 10-K chunking, retrieval, citations, answer status, table QA, negative cases, and follow-up rewriting.
-- Optional RAGAS Benchmark: computes faithfulness, answer relevancy, context precision/recall, and answer correctness when optional dependencies and evaluator credentials are available.
+- faithfulness
+- answer relevancy
+- context precision
+- context recall
+- answer correctness
 
-Chunking golden eval:
+RAGAS is optional and may require evaluator model configuration depending on the installed RAGAS version.
 
+Run benchmark commands:
 
 ```powershell
 python -m app.rag.eval.chunking_eval --cases tests/golden/chunking_cases.json --output data/eval/chunking_golden_report.json
-```
 
-Retriever golden eval:
-
-```powershell
 python -m app.rag.eval.retriever_eval --cases tests/golden/retriever_cases.json --output data/eval/retriever_golden_report.json
-```
 
-Answer golden eval is skipped by default because it may call the live NVIDIA LLM. Run it explicitly:
-
-```powershell
 $env:RUN_LLM_EVAL="1"
 python -m app.rag.eval.answer_eval --cases tests/golden/answer_cases.json --output data/eval/answer_golden_report.json
-```
 
-Without `RUN_LLM_EVAL=1`, answer eval reports live cases as skipped.
-
-Optional RAGAS eval:
-
-```powershell
 pip install -r requirements-eval.txt
 $env:RUN_RAGAS_EVAL="1"
 python -m app.rag.eval.ragas_eval --cases tests/golden/ragas_cases.json --output data/eval/ragas_report.json
-```
 
-Benchmark summary:
-
-```powershell
 python -m app.rag.eval.benchmark_summary --output data/eval/benchmark_summary.md
 ```
 
-## Tests
+If `RUN_LLM_EVAL` or `RUN_RAGAS_EVAL` is not set, live evals are skipped intentionally.
 
-Run targeted RAG demo tests:
+## 12. Example Questions
 
-```powershell
-pytest tests/test_llm_client.py tests/test_hybrid_retriever.py tests/test_reranker.py tests/test_conversation_memory.py tests/test_answer_service.py tests/test_routes_chat.py tests/test_answer_golden_eval.py
-```
+- What were Apple's total net sales and net income in 2023?
+- Why did Apple's total net sales decrease in 2023 compared to 2022?
+- Which product categories increased or decreased in 2023?
+- What was Apple's gross margin percentage in 2023?
+- What was Apple's Services gross margin percentage in 2023?
+- What was the weighted-average interest rate of Apple's commercial paper as of September 30, 2023?
+- What was Apple's weighted average interest rate in 2024?
+
+The 2024 interest rate question should return insufficient context when asking against the 2023 filing, because that filing does not contain the 2024 information.
+
+## 13. Tests
 
 Run all tests:
 
@@ -280,31 +367,53 @@ Run all tests:
 pytest
 ```
 
-Unit tests do not call NVIDIA, Chroma, or embedding models unless explicitly mocked for that test.
+Run targeted benchmark tests:
 
-## Main Files
+```powershell
+pytest tests/test_answer_golden_eval.py tests/test_ragas_eval.py tests/test_benchmark_summary.py
+```
 
-| Area | Files |
+Unit tests do not call NVIDIA or RAGAS live by default.
+
+## 14. Project Structure
+
+| Path | Purpose |
 | --- | --- |
-| Chunking | `app/rag/loader.py`, `section_detector.py`, `table_detector.py`, `splitter.py`, `chunk_pipeline.py` |
-| Artifacts | `app/rag/chunk_artifacts.py` |
-| Vector store | `app/rag/vector_store.py` |
-| Keyword retrieval | `app/rag/keyword_retriever.py` |
-| Hybrid retrieval | `app/rag/hybrid_retriever.py` |
-| Reranking | `app/rag/reranker.py` |
-| Memory | `app/rag/conversation_memory.py` |
-| Prompting | `app/rag/prompt_builder.py` |
-| LLM client | `app/rag/llm_client.py` |
-| Answer service | `app/rag/answer_service.py` |
-| APIs | `app/api/routes_upload.py`, `routes_retrieval.py`, `routes_chat.py` |
-| Streamlit | `frontend/streamlit_app.py` |
-| Golden evals | `app/rag/eval/*.py`, `tests/golden/*.json` |
+| `app/api` | FastAPI routes for upload, retrieval, and chat |
+| `app/core` | Runtime configuration |
+| `app/rag` | RAG pipeline modules: chunking, vector store, retrieval, reranking, prompting, memory, answer service |
+| `app/rag/eval` | Golden eval, optional RAGAS eval, and benchmark summary runners |
+| `frontend` | Streamlit UI |
+| `tests/golden` | Golden benchmark case files |
+| `docs` | Project documentation, including MVP freeze notes |
+| `data/eval` | Generated benchmark reports and summaries |
 
-## Known Non-Goals For This Phase
+## 15. MVP v0.1 Freeze
 
-- MLOps
-- MLflow integration
-- cloud deployment
-- auth and user management
-- production database memory
-- React frontend
+See [docs/MVP_FREEZE.md](docs/MVP_FREEZE.md).
+
+MVP v0.1 freezes the current feature set. After this point, the focus is benchmarking, bug fixing, documentation, and demo readiness. Large features such as agents, MLOps, deployment, and authentication are not part of this MVP phase.
+
+## 16. Known Limitations
+
+- Table extraction is heuristic and not production-grade.
+- Table QA works for selected benchmark cases but needs larger evaluation.
+- Query rewriting is heuristic-first and not a full conversational planner.
+- Conversation memory is in-memory only.
+- The benchmark set is still small.
+- RAGAS is optional and may require additional evaluator configuration.
+- No MLOps or MLflow integration.
+- No deployment layer.
+- No authentication or user management.
+- Not investment advice.
+
+## 17. Roadmap
+
+- Structured table extraction.
+- Larger benchmark dataset across more filings.
+- More robust answer validation.
+- Multi-document comparison.
+- Persistent memory/database.
+- MLOps and monitoring.
+- Deployment.
+- Optional tool-augmented financial QA.
