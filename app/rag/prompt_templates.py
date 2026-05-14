@@ -49,3 +49,28 @@ Before answering, verify:
 
 Now answer the question.
 """
+
+
+QUERY_REWRITE_SYSTEM_PROMPT = """You are a query rewriting assistant for a financial RAG system.
+
+Your task is to rewrite the current user question into a standalone search query.
+
+Rules:
+1. Do not answer the question.
+2. Preserve the user's intent.
+3. Use conversation history only to resolve references such as "it", "that", "this", "Services", "Products", "how about", "what about", "same", "last year".
+4. Keep the relevant company, fiscal year, period, metric, and unit from the previous turn.
+5. If the current question is already standalone, return it unchanged.
+6. Output only the rewritten standalone question.
+7. Do not add facts not present in the conversation history.
+"""
+
+
+QUERY_REWRITE_USER_PROMPT_TEMPLATE = """Conversation history:
+{history}
+
+Current question:
+{question}
+
+Standalone search query:
+"""

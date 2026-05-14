@@ -1,3 +1,5 @@
+import re
+
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -51,7 +53,12 @@ def split_section(section: SectionSpan, config: ChunkConfig | None = None) -> li
 
     tables = detect_tables(section.text, cfg)
     for table_index, table in enumerate(tables):
-        table_parts = split_large_table_text(table.text, cfg.max_table_chunk_chars)
+        table_headers = extract_table_headers(table.text)
+        table_parts = split_large_table_text(
+            table.text,
+            cfg.max_table_chunk_chars,
+            table_headers=table_headers,
+        )
         for table_part_index, table_part in enumerate(table_parts):
             part_suffix = (
                 f"-part-{table_part_index:02d}"
@@ -69,6 +76,8 @@ def split_section(section: SectionSpan, config: ChunkConfig | None = None) -> li
                         "table_part_index": table_part_index,
                         "table_part_count": len(table_parts),
                         "table_summary": f"{table.row_count} rows x {table.column_count} columns",
+                        "table_headers": table_headers,
+                        "table_context": build_table_context(table_part, table_headers),
                         "row_count": table.row_count,
                         "column_count": table.column_count,
                     },
@@ -98,7 +107,11 @@ def split_section(section: SectionSpan, config: ChunkConfig | None = None) -> li
     return chunks
 
 
-def split_large_table_text(table_text: str, max_chars: int) -> list[str]:
+def split_large_table_text(
+    table_text: str,
+    max_chars: int,
+    table_headers: str | None = None,
+) -> list[str]:
     """Split oversized table-like blocks on row boundaries."""
 
     if len(table_text) <= max_chars:
@@ -121,7 +134,57 @@ def split_large_table_text(table_text: str, max_chars: int) -> list[str]:
     if current_lines:
         parts.append("\n".join(current_lines).strip())
 
-    return [part for part in parts if part]
+    return [
+        ensure_table_headers(part, table_headers)
+        for part in parts
+        if part
+    ]
+
+
+def extract_table_headers(table_text: str, max_header_lines: int = 3) -> str | None:
+    """Extract compact year/column headers to carry into split table chunks."""
+
+    header_lines: list[str] = []
+    for line in table_text.splitlines()[:8]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _looks_like_year_header(stripped):
+            header_lines.append(stripped)
+            break
+        if header_lines:
+            header_lines.append(stripped)
+            if len(header_lines) >= max_header_lines:
+                break
+
+    if not header_lines:
+        return None
+    return "\n".join(header_lines)
+
+
+def ensure_table_headers(table_part: str, table_headers: str | None) -> str:
+    if not table_headers:
+        return table_part
+    if _contains_all_years(table_part, table_headers):
+        return table_part
+    return f"{table_headers}\n{table_part}"
+
+
+def build_table_context(table_part: str, table_headers: str | None) -> str:
+    return ensure_table_headers(table_part, table_headers)
+
+
+def _looks_like_year_header(line: str) -> bool:
+    years = re.findall(r"\b20\d{2}\b", line)
+    if len(years) >= 2:
+        return True
+    columns = [part for part in re.split(r"\s{2,}", line) if part]
+    return len(columns) >= 3 and any(re.fullmatch(r"20\d{2}", part) for part in columns)
+
+
+def _contains_all_years(text: str, table_headers: str) -> bool:
+    years = re.findall(r"\b20\d{2}\b", table_headers)
+    return all(year in text for year in years)
 
 
 def chunk_records_to_documents(records: list[ChunkRecord], source_metadata: dict | None = None) -> list[Document]:

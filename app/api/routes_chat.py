@@ -29,6 +29,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             rerank=request.rerank,
             session_id=request.session_id,
             use_memory=request.use_memory,
+            use_memory_for_retrieval=request.use_memory_for_retrieval,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -57,12 +58,18 @@ def chat_stream(request: ChatRequest) -> StreamingResponse:
                 rerank=request.rerank,
                 session_id=request.session_id,
                 use_memory=request.use_memory,
+                use_memory_for_retrieval=request.use_memory_for_retrieval,
             ):
                 yield _sse(event)
         except Exception as exc:
             yield _sse({"type": "error", "message": str(exc)})
+            yield _sse({"type": "done"})
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.delete("/chat/sessions/{session_id}")

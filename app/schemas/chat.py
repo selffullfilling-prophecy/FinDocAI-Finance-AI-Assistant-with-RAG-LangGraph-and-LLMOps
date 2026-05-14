@@ -13,9 +13,11 @@ class ChatRequest(BaseModel):
     rerank: bool = True
     session_id: str | None = None
     use_memory: bool = True
+    use_memory_for_retrieval: bool = False
 
 
 class SourceChunk(BaseModel):
+    source_number: int | None = None
     chunk_id: str | None = None
     section_item: str | None = None
     section_title: str | None = None

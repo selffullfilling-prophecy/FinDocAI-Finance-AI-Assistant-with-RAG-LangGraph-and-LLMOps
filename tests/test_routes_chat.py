@@ -52,6 +52,7 @@ def test_chat_route_valid_request_returns_chat_response(monkeypatch):
         rerank,
         session_id,
         use_memory,
+        use_memory_for_retrieval,
     ):
         assert question == "What drove net sales?"
         assert collection_name == "test_collection"
@@ -62,6 +63,7 @@ def test_chat_route_valid_request_returns_chat_response(monkeypatch):
         assert rerank is True
         assert session_id == "session-1"
         assert use_memory is True
+        assert use_memory_for_retrieval is True
         return {
             "answer": "Net sales were driven by Services. [Source 1]",
             "answer_status": "answered",
@@ -86,6 +88,7 @@ def test_chat_route_valid_request_returns_chat_response(monkeypatch):
             "collection_name": "test_collection",
             "metadata_filter": {"section_item": "7"},
             "session_id": "session-1",
+            "use_memory_for_retrieval": True,
         },
     )
 
@@ -149,7 +152,11 @@ def test_chat_route_value_error_returns_400(monkeypatch):
 
 
 def test_chat_stream_route_returns_sse_events_with_metadata(monkeypatch):
+    calls = {}
+
     def fake_stream_answer_question(**kwargs):
+        calls.update(kwargs)
+        yield {"type": "status", "stage": "retrieving", "message": "Retrieving relevant context..."}
         yield {"type": "token", "content": "Answer"}
         yield {"type": "metadata", "answer_status": "unverified_sources", "retrieved_context": []}
         yield {"type": "sources", "sources": []}
@@ -160,10 +167,17 @@ def test_chat_stream_route_returns_sse_events_with_metadata(monkeypatch):
 
     response = client.post(
         "/chat/stream",
-        json={"question": "What drove net sales?", "collection_name": "test_collection"},
+        json={
+            "question": "What drove net sales?",
+            "collection_name": "test_collection",
+            "use_memory_for_retrieval": True,
+        },
     )
 
     assert response.status_code == 200
+    assert calls["use_memory_for_retrieval"] is True
+    assert response.headers["cache-control"] == "no-cache"
+    assert 'data: {"type": "status", "stage": "retrieving", "message": "Retrieving relevant context..."}' in response.text
     assert 'data: {"type": "token", "content": "Answer"}' in response.text
     assert 'data: {"type": "metadata", "answer_status": "unverified_sources", "retrieved_context": []}' in response.text
     assert 'data: {"type": "done"}' in response.text

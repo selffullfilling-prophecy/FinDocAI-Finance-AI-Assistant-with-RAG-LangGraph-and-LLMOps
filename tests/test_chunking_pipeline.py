@@ -3,7 +3,8 @@ from langchain_core.documents import Document
 from app.rag.chunk_models import ChunkConfig
 from app.rag.chunk_pipeline import chunk_loaded_10k_documents
 from app.rag.section_detector import detect_10k_sections, join_pages
-from app.rag.splitter import split_large_table_text
+from app.rag.splitter import split_large_table_text, split_section
+from app.rag.chunk_models import SectionSpan
 
 
 def test_detect_10k_sections_ignores_table_of_contents_items():
@@ -207,3 +208,32 @@ def test_chunk_loaded_10k_documents_marks_table_chunks():
         for chunk in chunks
         if chunk.metadata["chunk_type"] == "section_text"
     )
+
+
+def test_split_table_chunks_carry_year_headers_into_later_parts():
+    table_text = "\n".join(
+        [
+            "2023 2022 2021",
+            "Products 36.5% 36.3% 35.3%",
+            "Services 70.8% 71.7% 69.7%",
+            "Total gross margin percentage 44.1% 43.3% 41.8%",
+        ]
+    )
+    section = SectionSpan(
+        item_id="7",
+        title="Management's Discussion and Analysis",
+        text=table_text,
+        start_char=0,
+        end_char=len(table_text),
+        metadata={"page_number": 24},
+    )
+
+    chunks = split_section(section, ChunkConfig(max_table_chunk_chars=55, table_min_rows=2))
+    table_chunks = [chunk for chunk in chunks if chunk.chunk_type.value == "table"]
+
+    assert len(table_chunks) > 1
+    percentage_chunk = next(chunk for chunk in table_chunks if "Total gross margin percentage" in chunk.content)
+    assert "2023" in percentage_chunk.content
+    assert "2022" in percentage_chunk.content
+    assert "2021" in percentage_chunk.content
+    assert "44.1%" in percentage_chunk.metadata["table_context"]

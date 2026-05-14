@@ -87,3 +87,10 @@ def test_stream_answer_yields_tokens(monkeypatch):
     monkeypatch.setattr(llm_client, "_build_client", lambda base_url, api_key: FakeClient())
 
     assert list(llm_client.stream_answer("prompt")) == ["A", "B"]
+
+
+def test_rewrite_query_with_llm_uses_fake_openai_client(monkeypatch):
+    monkeypatch.setattr(llm_client, "get_settings", lambda: DummySettings())
+    monkeypatch.setattr(llm_client, "_build_client", lambda base_url, api_key: FakeClient())
+
+    assert llm_client.rewrite_query_with_llm("How about Services?", "User: gross margin") == "answer"

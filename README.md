@@ -136,6 +136,7 @@ $body = @{
   candidate_k = 20
   session_id = "demo-session"
   use_memory = $true
+  use_memory_for_retrieval = $false
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod `
@@ -171,6 +172,8 @@ The default reranker is deterministic and does not load an external model. It bo
 
 Chat memory is in-memory per `session_id`. It stores recent user/assistant turns and sources. It is useful for the demo, but it is not a production database-backed memory layer.
 
+By default, conversation history is used in the answer prompt but not in the retrieval query. This avoids a previous independent question, such as an interest-rate question, polluting retrieval for a later standalone question about gross margin. Set `use_memory_for_retrieval=true` only when testing follow-up questions such as "What about 2022?"
+
 Clear memory:
 
 ```powershell
@@ -183,6 +186,7 @@ FinDocAI separates retrieval context from cited sources:
 
 - `retrieved_context` is the top-k context sent to the LLM. These passages are useful for Developer Mode and debugging.
 - `sources` contains only the chunks explicitly cited by the answer with valid `[Source N]` citations.
+- Each returned source preserves its original `source_number`, so an answer citation like `[Source 3]` renders as `Source 3` in the UI.
 - If the answer is insufficient, `answer_status = "insufficient_context"` and `sources = []`.
 - If the answer makes claims without valid citations, `answer_status = "unverified_sources"` and `sources = []`.
 - User Mode displays only supporting `sources`.
@@ -199,6 +203,8 @@ Example:
 ```
 
 Developer Mode may still show related retrieved passages from another period, such as 2023, for debugging. Those passages are not treated as sources unless the answer cites them directly and they support the specific claim.
+
+Table chunks carry forward detected year/column headers into split table parts where possible. Source previews also prefer table context metadata, so rows such as `Total gross margin percentage 44.1% 43.3% 41.8%` remain connected to headers like `2023 2022 2021`.
 
 ## Golden Evals
 
