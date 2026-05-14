@@ -18,6 +18,20 @@ from app.rag.reranker import candidates_to_ranked_documents, rerank_candidates
 INSUFFICIENT_CONTEXT_ANSWER = (
     "The provided documents do not contain enough information to answer this question."
 )
+ANSWER_STATUS_ANSWERED = "answered"
+ANSWER_STATUS_INSUFFICIENT = "insufficient_context"
+ANSWER_STATUS_UNVERIFIED = "unverified_sources"
+
+INSUFFICIENT_ANSWER_MARKERS = [
+    "provided documents do not contain enough information",
+    "does not contain enough information",
+    "do not contain enough information",
+    "not enough information",
+    "cannot determine",
+    "not provided",
+    "not available",
+    "not present in the provided context",
+]
 
 
 def answer_question(
@@ -51,12 +65,13 @@ def answer_question(
         metadata_filter=metadata_filter,
         rerank=rerank,
     )
-    sources = format_source_chunks(retrieved_chunks)
+    retrieved_context = format_source_chunks(retrieved_chunks)
 
     if not retrieved_chunks:
         _remember_turn(normalized_session_id, question, INSUFFICIENT_CONTEXT_ANSWER, [], use_memory)
         return {
             "answer": INSUFFICIENT_CONTEXT_ANSWER,
+            "answer_status": ANSWER_STATUS_INSUFFICIENT,
             "collection_name": collection_name,
             "top_k": top_k,
             "candidate_k": candidate_k,
@@ -64,6 +79,7 @@ def answer_question(
             "rerank": rerank,
             "session_id": normalized_session_id,
             "sources": [],
+            "retrieved_context": [],
             "debug": {"retrieval_query": retrieval_query, "candidate_count": len(candidates)},
         }
 
@@ -76,11 +92,15 @@ def answer_question(
         max_total_context_chars=settings.rag_max_total_context_chars,
     )
     answer = generate_answer(prompt).strip() or INSUFFICIENT_CONTEXT_ANSWER
-    answer = apply_citation_fallback(answer, sources)
+    cited_numbers = extract_cited_source_numbers(answer)
+    cited_sources, citation_debug = filter_cited_sources_with_debug(retrieved_context, cited_numbers)
+    answer_status = classify_answer_status(answer, cited_sources, retrieved_context)
+    sources = [] if answer_status == ANSWER_STATUS_INSUFFICIENT else cited_sources
     _remember_turn(normalized_session_id, question, answer, sources, use_memory)
 
     return {
         "answer": answer,
+        "answer_status": answer_status,
         "collection_name": collection_name,
         "top_k": top_k,
         "candidate_k": candidate_k,
@@ -88,7 +108,13 @@ def answer_question(
         "rerank": rerank,
         "session_id": normalized_session_id,
         "sources": sources,
-        "debug": {"retrieval_query": retrieval_query, "candidate_count": len(candidates)},
+        "retrieved_context": retrieved_context,
+        "debug": {
+            "retrieval_query": retrieval_query,
+            "candidate_count": len(candidates),
+            "cited_source_numbers": sorted(cited_numbers),
+            **citation_debug,
+        },
     }
 
 
@@ -121,11 +147,17 @@ def stream_answer_question(
         metadata_filter=metadata_filter,
         rerank=rerank,
     )
-    sources = format_source_chunks(retrieved_chunks)
+    retrieved_context = format_source_chunks(retrieved_chunks)
 
     if not retrieved_chunks:
         _remember_turn(normalized_session_id, question, INSUFFICIENT_CONTEXT_ANSWER, [], use_memory)
         yield {"type": "token", "content": INSUFFICIENT_CONTEXT_ANSWER}
+        yield {
+            "type": "metadata",
+            "answer_status": ANSWER_STATUS_INSUFFICIENT,
+            "retrieved_context": [],
+            "debug": {"retrieval_query": retrieval_query, "candidate_count": len(candidates)},
+        }
         yield {"type": "sources", "sources": []}
         yield {"type": "done"}
         return
@@ -145,11 +177,22 @@ def stream_answer_question(
         yield {"type": "token", "content": token}
 
     answer = "".join(answer_parts).strip() or INSUFFICIENT_CONTEXT_ANSWER
-    answer = apply_citation_fallback(answer, sources)
-    if "[Source" not in "".join(answer_parts) and sources:
-        yield {"type": "token", "content": answer[len("".join(answer_parts)) :]}
-
+    cited_numbers = extract_cited_source_numbers(answer)
+    cited_sources, citation_debug = filter_cited_sources_with_debug(retrieved_context, cited_numbers)
+    answer_status = classify_answer_status(answer, cited_sources, retrieved_context)
+    sources = [] if answer_status == ANSWER_STATUS_INSUFFICIENT else cited_sources
     _remember_turn(normalized_session_id, question, answer, sources, use_memory)
+    yield {
+        "type": "metadata",
+        "answer_status": answer_status,
+        "retrieved_context": retrieved_context,
+        "debug": {
+            "retrieval_query": retrieval_query,
+            "candidate_count": len(candidates),
+            "cited_source_numbers": sorted(cited_numbers),
+            **citation_debug,
+        },
+    }
     yield {"type": "sources", "sources": sources}
     yield {"type": "done"}
 
@@ -182,11 +225,64 @@ def format_source_chunks(
     return sources
 
 
-def apply_citation_fallback(answer: str, sources: list[dict[str, Any]]) -> str:
-    if not sources or "[Source" in answer:
-        return answer
-    citations = ", ".join(f"[Source {index}]" for index, _source in enumerate(sources, start=1))
-    return f"{answer}\n\nSources: {citations}"
+def is_insufficient_answer(answer: str) -> bool:
+    answer_lower = answer.lower()
+    return any(marker in answer_lower for marker in INSUFFICIENT_ANSWER_MARKERS)
+
+
+def extract_cited_source_numbers(answer: str) -> set[int]:
+    cited_numbers: set[int] = set()
+    for match in re.finditer(r"\[Source\s+(\d+)\]", answer, flags=re.IGNORECASE):
+        try:
+            source_number = int(match.group(1))
+        except ValueError:
+            continue
+        if source_number > 0:
+            cited_numbers.add(source_number)
+    return cited_numbers
+
+
+def filter_cited_sources(
+    all_context_sources: list[dict[str, Any]],
+    cited_numbers: set[int],
+) -> list[dict[str, Any]]:
+    sources, _debug = filter_cited_sources_with_debug(all_context_sources, cited_numbers)
+    return sources
+
+
+def filter_cited_sources_with_debug(
+    all_context_sources: list[dict[str, Any]],
+    cited_numbers: set[int],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cited_sources: list[dict[str, Any]] = []
+    invalid_citations: list[int] = []
+    seen: set[int] = set()
+
+    for source_number in sorted(cited_numbers):
+        if source_number in seen:
+            continue
+        seen.add(source_number)
+        index = source_number - 1
+        if 0 <= index < len(all_context_sources):
+            cited_sources.append(all_context_sources[index])
+        else:
+            invalid_citations.append(source_number)
+
+    return cited_sources, {"invalid_citation_numbers": invalid_citations}
+
+
+def classify_answer_status(
+    answer: str,
+    cited_sources: list[dict[str, Any]],
+    retrieved_context: list[dict[str, Any]],
+) -> str:
+    if is_insufficient_answer(answer):
+        return ANSWER_STATUS_INSUFFICIENT
+    if not answer.strip():
+        return ANSWER_STATUS_INSUFFICIENT
+    if cited_sources:
+        return ANSWER_STATUS_ANSWERED
+    return ANSWER_STATUS_UNVERIFIED
 
 
 def _validate_inputs(question: str, collection_name: str) -> tuple[str, str]:

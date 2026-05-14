@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
-from app.rag.answer_service import INSUFFICIENT_CONTEXT_ANSWER, answer_question
+from app.rag.answer_service import ANSWER_STATUS_INSUFFICIENT, INSUFFICIENT_CONTEXT_ANSWER, answer_question
 
 
 def run_answer_golden_eval(cases_path: str | Path) -> dict[str, Any]:
@@ -51,6 +51,7 @@ def evaluate_answer_case(case: dict[str, Any]) -> dict[str, Any]:
 
 def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> dict[str, Any]:
     answer = str(response.get("answer", ""))
+    answer_status = str(response.get("answer_status", ""))
     sources = response.get("sources", []) or []
     answer_lower = answer.lower()
     issues: list[str] = []
@@ -65,8 +66,11 @@ def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> di
     ]
 
     citation_present = "[Source" in answer
-    if case.get("require_citation", False) and not citation_present:
-        issues.append("Citation is required but answer does not contain [Source ...].")
+    if case.get("require_citation", False):
+        if not citation_present:
+            issues.append("Citation is required but answer does not contain [Source ...].")
+        if not sources:
+            issues.append("Citation is required but response.sources is empty.")
 
     if expected_any and not matched_any:
         issues.append(f"Answer did not contain any expected_terms_any: {expected_any}.")
@@ -78,9 +82,15 @@ def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> di
         issues.append(f"Answer contains forbidden terms: {forbidden_matches}.")
 
     allow_insufficient = bool(case.get("allow_insufficient_context", False))
-    insufficient = INSUFFICIENT_CONTEXT_ANSWER.lower() in answer_lower
+    insufficient = answer_status == ANSWER_STATUS_INSUFFICIENT or INSUFFICIENT_CONTEXT_ANSWER.lower() in answer_lower
     if insufficient and not allow_insufficient:
         issues.append("Answer reported insufficient context but case does not allow it.")
+    if insufficient and sources:
+        issues.append("Insufficient-context answers must not return sources.")
+
+    expected_status = case.get("expected_answer_status")
+    if expected_status and answer_status != expected_status:
+        issues.append(f"Expected answer_status={expected_status}, got {answer_status}.")
 
     expected_sections = {str(item) for item in case.get("expected_source_sections", [])}
     source_sections = {str(source.get("section_item")) for source in sources if source.get("section_item") is not None}
@@ -95,6 +105,7 @@ def evaluate_answer_result(case: dict[str, Any], response: dict[str, Any]) -> di
         "question": case.get("question", ""),
         "collection_name": case.get("collection_name"),
         "answer": answer,
+        "answer_status": answer_status,
         "sources": [_summarize_source(index, source) for index, source in enumerate(sources, start=1)],
         "matched_terms": sorted(set(matched_any + matched_all)),
         "missing_terms": missing_all,
@@ -137,6 +148,7 @@ def _failed(case: dict[str, Any], issues: list[str]) -> dict[str, Any]:
         "question": case.get("question", ""),
         "collection_name": case.get("collection_name"),
         "answer": "",
+        "answer_status": "",
         "sources": [],
         "matched_terms": [],
         "missing_terms": [],

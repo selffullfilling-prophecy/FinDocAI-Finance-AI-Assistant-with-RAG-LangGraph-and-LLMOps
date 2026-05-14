@@ -3,6 +3,7 @@ from __future__ import annotations
 from langchain_core.documents import Document
 
 from app.core.config import get_settings
+from app.rag.prompt_templates import RAG_USER_PROMPT_TEMPLATE
 
 
 def build_rag_prompt(
@@ -31,18 +32,10 @@ def build_rag_prompt(
     history = (conversation_history or "").strip()
     history_block = f"Conversation history:\n{history}\n\n" if history else ""
 
-    return (
-        "You are a financial document assistant.\n"
-        "Answer using only the provided context.\n"
-        "If the context does not contain enough information, say that the provided documents do not contain enough information.\n"
-        "Do not invent numbers, dates, financial metrics, or claims.\n"
-        "Cite relevant sources using [Source 1], [Source 2], etc.\n\n"
-        "Context:\n"
-        f"{context}\n\n"
-        f"{history_block}"
-        "Question:\n"
-        f"{question.strip()}\n\n"
-        "Answer:"
+    return RAG_USER_PROMPT_TEMPLATE.format(
+        context=context,
+        conversation_history_block=history_block,
+        question=question.strip(),
     )
 
 
@@ -98,7 +91,9 @@ def _limit_context_blocks(blocks: list[str], max_total_context_chars: int) -> st
             continue
 
         if remaining > 300:
-            selected.append(_truncate(block, remaining))
+            header = block.split("\n", 1)[0]
+            if header.startswith("[Source "):
+                selected.append(_truncate(block, remaining))
         break
 
     return "\n\n".join(selected)

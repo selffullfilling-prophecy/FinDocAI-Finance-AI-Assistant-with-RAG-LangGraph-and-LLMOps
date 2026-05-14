@@ -31,6 +31,7 @@ class SourceChunk(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    answer_status: Literal["answered", "insufficient_context", "unverified_sources"]
     collection_name: str
     top_k: int
     candidate_k: int
@@ -38,4 +39,5 @@ class ChatResponse(BaseModel):
     rerank: bool
     session_id: str
     sources: list[SourceChunk]
+    retrieved_context: list[SourceChunk] | None = None
     debug: dict[str, Any] | None = None

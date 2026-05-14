@@ -5,11 +5,11 @@ from app.rag.conversation_memory import memory_store
 from app.rag.hybrid_retriever import RetrievedCandidate
 
 
-def _document() -> Document:
+def _document(chunk_id: str = "item-7-text-001", content: str | None = None) -> Document:
     return Document(
-        page_content="Net sales increased due to higher iPhone revenue and Services revenue.",
+        page_content=content or "Net sales increased due to higher iPhone revenue and Services revenue.",
         metadata={
-            "chunk_id": "item-7-text-001",
+            "chunk_id": chunk_id,
             "section_item": "7",
             "section_title": "Management's Discussion and Analysis",
             "chunk_type": "section_text",
@@ -20,9 +20,16 @@ def _document() -> Document:
 
 
 def _candidate() -> RetrievedCandidate:
+    return _candidate_with_id(
+        "item-7-text-001",
+        "Net sales increased due to higher iPhone revenue and Services revenue.",
+    )
+
+
+def _candidate_with_id(chunk_id: str, content: str) -> RetrievedCandidate:
     return RetrievedCandidate(
-        document=_document(),
-        chunk_id="item-7-text-001",
+        document=_document(chunk_id=chunk_id, content=content),
+        chunk_id=chunk_id,
         vector_score=0.2,
         keyword_score=12.0,
         hybrid_score=0.9,
@@ -62,14 +69,16 @@ def test_answer_question_no_chunks_does_not_call_llm(monkeypatch):
     )
 
     assert result["answer"] == answer_service.INSUFFICIENT_CONTEXT_ANSWER
+    assert result["answer_status"] == "insufficient_context"
     assert result["collection_name"] == "test_collection"
     assert result["top_k"] == 5
     assert result["candidate_k"] == 20
     assert result["retrieval_mode"] == "hybrid"
     assert result["sources"] == []
+    assert result["retrieved_context"] == []
 
 
-def test_answer_question_hybrid_rerank_calls_llm_and_returns_sources(monkeypatch):
+def test_answer_question_cited_answer_returns_only_supporting_sources(monkeypatch):
     calls = {}
 
     def fake_retrieve_candidates(query, collection_name, candidate_k, metadata_filter, retrieval_mode):
@@ -92,7 +101,7 @@ def test_answer_question_hybrid_rerank_calls_llm_and_returns_sources(monkeypatch
 
     def fake_generate_answer(prompt):
         calls["prompt"] = prompt
-        return "Net sales were driven by iPhone and Services revenue."
+        return "Net sales were driven by iPhone and Services revenue. [Source 1]"
 
     monkeypatch.setattr(answer_service, "retrieve_candidates", fake_retrieve_candidates)
     monkeypatch.setattr(answer_service, "rerank_candidates", fake_rerank_candidates)
@@ -123,11 +132,80 @@ def test_answer_question_hybrid_rerank_calls_llm_and_returns_sources(monkeypatch
         "metadata_filter": {"section_item": "7"},
     }
     assert "What drove net sales?" in calls["prompt"]
-    assert result["answer"].endswith("Sources: [Source 1]")
+    assert result["answer_status"] == "answered"
+    assert result["answer"].endswith("[Source 1]")
     assert result["sources"][0]["chunk_id"] == "item-7-text-001"
     assert result["sources"][0]["section_item"] == "7"
     assert result["sources"][0]["score"] == 1.23
     assert result["sources"][0]["final_score"] == 1.23
+    assert result["retrieved_context"][0]["chunk_id"] == "item-7-text-001"
+
+
+def test_insufficient_answer_does_not_get_fallback_citations(monkeypatch):
+    monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: [_candidate()])
+    monkeypatch.setattr(
+        answer_service,
+        "generate_answer",
+        lambda prompt: "The provided documents do not contain enough information to answer this question.",
+    )
+
+    result = answer_service.answer_question(
+        "What was Apple's weighted average interest rate in 2024?",
+        "test_collection",
+        use_memory=False,
+    )
+
+    assert result["answer_status"] == "insufficient_context"
+    assert result["sources"] == []
+    assert len(result["retrieved_context"]) == 1
+    assert "Sources:" not in result["answer"]
+
+
+def test_cited_source_filtering_returns_only_cited_context_source(monkeypatch):
+    candidates = [
+        _candidate_with_id("source-1", "First related passage."),
+        _candidate_with_id("source-2", "Mac and iPhone sales decreased."),
+        _candidate_with_id("source-3", "Third related passage."),
+    ]
+    monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: candidates)
+    monkeypatch.setattr(
+        answer_service,
+        "generate_answer",
+        lambda prompt: "Net sales decreased due to lower Mac and iPhone sales [Source 2].",
+    )
+
+    result = answer_service.answer_question(
+        "Why did net sales decrease?",
+        "test_collection",
+        rerank=False,
+        use_memory=False,
+    )
+
+    assert result["answer_status"] == "answered"
+    assert len(result["sources"]) == 1
+    assert result["sources"][0]["chunk_id"] == "source-2"
+    assert len(result["retrieved_context"]) == 3
+
+
+def test_invalid_citation_number_is_ignored(monkeypatch):
+    monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: [_candidate()])
+    monkeypatch.setattr(answer_service, "generate_answer", lambda prompt: "Answer [Source 99].")
+
+    result = answer_service.answer_question("Question?", "test_collection", use_memory=False)
+
+    assert result["answer_status"] == "unverified_sources"
+    assert result["sources"] == []
+    assert result["debug"]["invalid_citation_numbers"] == [99]
+
+
+def test_no_citation_answer_is_unverified_sources(monkeypatch):
+    monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: [_candidate()])
+    monkeypatch.setattr(answer_service, "generate_answer", lambda prompt: "Net sales decreased due to lower Mac sales.")
+
+    result = answer_service.answer_question("Why did net sales decrease?", "test_collection", use_memory=False)
+
+    assert result["answer_status"] == "unverified_sources"
+    assert result["sources"] == []
 
 
 def test_answer_question_without_rerank_uses_candidate_scores(monkeypatch):
@@ -146,7 +224,7 @@ def test_answer_question_without_rerank_uses_candidate_scores(monkeypatch):
     assert result["sources"][0]["keyword_score"] == 12.0
 
 
-def test_answer_question_updates_memory(monkeypatch):
+def test_answer_question_updates_memory_with_filtered_sources(monkeypatch):
     session_id = "unit-test-memory"
     memory_store.clear_session(session_id)
     monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: [_candidate()])
@@ -162,12 +240,13 @@ def test_answer_question_updates_memory(monkeypatch):
     turns = memory_store.get_recent_history(session_id, max_turns=10)
     assert [turn.role for turn in turns] == ["user", "assistant"]
     assert turns[0].content == "What drove net sales?"
+    assert turns[1].sources[0]["chunk_id"] == "item-7-text-001"
     memory_store.clear_session(session_id)
 
 
-def test_stream_answer_question_yields_tokens_sources_done(monkeypatch):
+def test_stream_answer_question_yields_metadata_sources_done(monkeypatch):
     monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: [_candidate()])
-    monkeypatch.setattr(answer_service, "stream_answer", lambda prompt: iter(["Answer", "."]))
+    monkeypatch.setattr(answer_service, "stream_answer", lambda prompt: iter(["Answer [Source 1]", "."]))
 
     events = list(
         answer_service.stream_answer_question(
@@ -177,9 +256,34 @@ def test_stream_answer_question_yields_tokens_sources_done(monkeypatch):
         )
     )
 
-    assert events[0] == {"type": "token", "content": "Answer"}
+    assert events[0] == {"type": "token", "content": "Answer [Source 1]"}
+    assert events[-3]["type"] == "metadata"
+    assert events[-3]["answer_status"] == "answered"
     assert events[-2]["type"] == "sources"
+    assert events[-2]["sources"][0]["chunk_id"] == "item-7-text-001"
     assert events[-1] == {"type": "done"}
+
+
+def test_stream_answer_question_insufficient_context_has_empty_sources(monkeypatch):
+    monkeypatch.setattr(answer_service, "retrieve_candidates", lambda **kwargs: [_candidate()])
+    monkeypatch.setattr(
+        answer_service,
+        "stream_answer",
+        lambda prompt: iter(["The provided documents do not contain enough information to answer this question."]),
+    )
+
+    events = list(
+        answer_service.stream_answer_question(
+            "What was Apple's weighted average interest rate in 2024?",
+            "test_collection",
+            use_memory=False,
+        )
+    )
+
+    metadata_event = next(event for event in events if event["type"] == "metadata")
+    sources_event = next(event for event in events if event["type"] == "sources")
+    assert metadata_event["answer_status"] == "insufficient_context"
+    assert sources_event["sources"] == []
 
 
 def test_format_source_chunks_uses_page_number_fallback_and_truncates_preview():

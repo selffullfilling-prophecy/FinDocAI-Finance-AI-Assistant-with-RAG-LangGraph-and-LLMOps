@@ -177,6 +177,29 @@ Clear memory:
 Invoke-RestMethod -Method Delete -Uri "http://127.0.0.1:8000/chat/sessions/demo-session"
 ```
 
+## Source Attribution Policy
+
+FinDocAI separates retrieval context from cited sources:
+
+- `retrieved_context` is the top-k context sent to the LLM. These passages are useful for Developer Mode and debugging.
+- `sources` contains only the chunks explicitly cited by the answer with valid `[Source N]` citations.
+- If the answer is insufficient, `answer_status = "insufficient_context"` and `sources = []`.
+- If the answer makes claims without valid citations, `answer_status = "unverified_sources"` and `sources = []`.
+- User Mode displays only supporting `sources`.
+- Developer Mode may show `retrieved_context` as related retrieved passages, but they are not called sources.
+
+Example:
+
+```json
+{
+  "question": "What was Apple's weighted average interest rate in 2024?",
+  "answer_status": "insufficient_context",
+  "sources": []
+}
+```
+
+Developer Mode may still show related retrieved passages from another period, such as 2023, for debugging. Those passages are not treated as sources unless the answer cites them directly and they support the specific claim.
+
 ## Golden Evals
 
 Chunking eval:

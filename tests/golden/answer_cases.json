@@ -13,5 +13,21 @@
     "require_citation": true,
     "allow_insufficient_context": false,
     "forbidden_terms": ["I think", "probably", "not sure"]
+  },
+  {
+    "case_id": "aapl_2024_weighted_average_interest_rate_insufficient",
+    "question": "What was Apple's weighted average interest rate in 2024?",
+    "collection_name": "findoc_nasdaq_aapl_2023",
+    "top_k": 5,
+    "candidate_k": 20,
+    "retrieval_mode": "hybrid",
+    "rerank": true,
+    "expected_terms_any": [],
+    "expected_terms_all": [],
+    "expected_source_sections": [],
+    "require_citation": false,
+    "allow_insufficient_context": true,
+    "expected_answer_status": "insufficient_context",
+    "forbidden_terms": ["I think", "probably", "not sure"]
   }
 ]

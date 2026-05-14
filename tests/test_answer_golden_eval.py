@@ -17,10 +17,12 @@ def _case(**overrides):
     return base
 
 
-def _response(answer="Net sales grew because of iPhone. [Source 1]"):
+def _response(answer="Net sales grew because of iPhone. [Source 1]", answer_status="answered", sources=None):
     return {
         "answer": answer,
-        "sources": [{"chunk_id": "c1", "section_item": "7", "chunk_type": "section_text"}],
+        "answer_status": answer_status,
+        "sources": sources if sources is not None else [{"chunk_id": "c1", "section_item": "7", "chunk_type": "section_text"}],
+        "retrieved_context": [{"chunk_id": "related", "section_item": "1A"}],
     }
 
 
@@ -33,7 +35,7 @@ def test_answer_eval_expected_term_match_passes():
 
 
 def test_answer_eval_missing_citation_fails():
-    result = answer_eval.evaluate_answer_result(_case(), _response("Net sales grew because of iPhone."))
+    result = answer_eval.evaluate_answer_result(_case(), _response("Net sales grew because of iPhone.", sources=[]))
 
     assert result["status"] == "failed"
     assert "Citation is required" in result["issues"][0]
@@ -47,6 +49,52 @@ def test_answer_eval_forbidden_term_fails():
 
     assert result["status"] == "failed"
     assert "forbidden" in result["issues"][0].lower()
+
+
+def test_answer_eval_insufficient_context_requires_empty_sources():
+    result = answer_eval.evaluate_answer_result(
+        _case(
+            allow_insufficient_context=True,
+            require_citation=False,
+            expected_answer_status="insufficient_context",
+            expected_terms_any=[],
+            expected_source_sections=[],
+        ),
+        _response(
+            "The provided documents do not contain enough information to answer this question.",
+            answer_status="insufficient_context",
+            sources=[],
+        ),
+    )
+
+    assert result["status"] == "passed"
+
+
+def test_answer_eval_insufficient_context_with_sources_fails():
+    result = answer_eval.evaluate_answer_result(
+        _case(allow_insufficient_context=True, require_citation=False),
+        _response(
+            "The provided documents do not contain enough information to answer this question.",
+            answer_status="insufficient_context",
+            sources=[{"chunk_id": "bad", "section_item": "7"}],
+        ),
+    )
+
+    assert result["status"] == "failed"
+    assert "must not return sources" in " ".join(result["issues"])
+
+
+def test_answer_eval_expected_source_sections_checks_sources_not_retrieved_context():
+    result = answer_eval.evaluate_answer_result(
+        _case(expected_source_sections=["7"]),
+        _response(
+            "Net sales grew because of iPhone. [Source 1]",
+            sources=[],
+        ),
+    )
+
+    assert result["status"] == "failed"
+    assert "No source section matched" in " ".join(result["issues"])
 
 
 def test_answer_eval_skips_when_run_llm_eval_not_set(monkeypatch):

@@ -5,14 +5,7 @@ from collections.abc import Iterator
 from openai import OpenAI
 
 from app.core.config import get_settings
-
-
-SYSTEM_MESSAGE = (
-    "You are a financial document assistant. "
-    "Answer only using the provided context. "
-    "If the context is insufficient, say that the provided documents do not contain enough information. "
-    "Do not invent financial numbers, dates, metrics, or claims."
-)
+from app.rag.prompt_templates import RAG_SYSTEM_PROMPT
 
 
 def generate_answer(prompt: str) -> str:
@@ -83,7 +76,7 @@ def _completion_kwargs(prompt: str, stream: bool) -> dict:
     kwargs = {
         "model": settings.nvidia_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_MESSAGE},
+            {"role": "system", "content": RAG_SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
         "temperature": settings.nvidia_temperature,

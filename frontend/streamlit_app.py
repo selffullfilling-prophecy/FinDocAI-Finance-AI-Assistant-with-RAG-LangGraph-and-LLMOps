@@ -323,12 +323,17 @@ def render_chat_area(healthy: bool, settings: dict[str, Any], developer_mode: bo
 
     for message in st.session_state.get("chat_messages", []):
         with st.chat_message(message["role"]):
-            if message.get("warning"):
-                st.warning(message["content"])
+            answer_status = message.get("answer_status")
+            if answer_status == "insufficient_context":
+                st.warning("I could not find enough information in the uploaded document.")
             else:
                 st.markdown(message["content"])
-            if message.get("sources"):
+            if answer_status == "unverified_sources":
+                st.warning("This answer did not include verified citations.")
+            if answer_status == "answered" and message.get("sources"):
                 render_sources(message["sources"], developer_mode=developer_mode)
+            if developer_mode and message.get("retrieved_context"):
+                render_related_context(message["retrieved_context"])
 
     if not st.session_state.get("document_ready"):
         st.info("Upload a financial document to start asking questions.")
@@ -358,15 +363,28 @@ def submit_question(question: str, settings: dict[str, Any], developer_mode: boo
         else:
             answer, sources, raw_response = run_non_streaming_chat(payload, developer_mode)
 
-        warning = is_insufficient_context(answer)
-        if warning:
+        answer_status = raw_response.get("answer_status") or classify_ui_answer_status(answer, sources)
+        retrieved_context = raw_response.get("retrieved_context") or []
+
+        if answer_status == "insufficient_context":
             st.warning("I could not find enough information in the uploaded document.")
         elif not settings["stream"]:
             st.markdown(answer)
-        render_sources(sources, developer_mode=developer_mode)
+        if answer_status == "unverified_sources":
+            st.warning("This answer did not include verified citations.")
+        if answer_status == "answered" and sources:
+            render_sources(sources, developer_mode=developer_mode)
+        if developer_mode and retrieved_context:
+            render_related_context(retrieved_context)
 
     st.session_state["chat_messages"].append(
-        {"role": "assistant", "content": answer, "sources": sources, "warning": warning}
+        {
+            "role": "assistant",
+            "content": answer,
+            "sources": sources,
+            "answer_status": answer_status,
+            "retrieved_context": retrieved_context,
+        }
     )
     st.session_state["last_raw_response"] = raw_response
 
@@ -376,6 +394,7 @@ def run_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[s
     answer = ""
     sources: list[dict[str, Any]] = []
     raw_events: list[dict[str, Any]] = []
+    metadata: dict[str, Any] = {}
 
     try:
         for event in stream_chat(api_url(), payload):
@@ -384,6 +403,8 @@ def run_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[s
             if event_type == "token":
                 answer += event.get("content", "")
                 answer_placeholder.markdown(answer)
+            elif event_type == "metadata":
+                metadata = event
             elif event_type == "sources":
                 sources = event.get("sources", [])
             elif event_type == "error":
@@ -393,9 +414,22 @@ def run_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[s
         st.error(message)
         if developer_mode:
             st.exception(exc)
-        return message, [], {"error": str(exc), "events": raw_events}
+        return message, [], {"error": str(exc), "events": raw_events, "answer_status": "unverified_sources"}
 
-    return answer, sources, {"events": raw_events}
+    answer_status = metadata.get("answer_status") or classify_ui_answer_status(answer, sources)
+    if answer_status == "insufficient_context":
+        answer_placeholder.empty()
+
+    return (
+        answer,
+        sources,
+        {
+            "events": raw_events,
+            "answer_status": answer_status,
+            "retrieved_context": metadata.get("retrieved_context", []),
+            "debug": metadata.get("debug"),
+        },
+    )
 
 
 def run_non_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
@@ -430,6 +464,14 @@ def is_insufficient_context(answer: str) -> bool:
     return "provided documents do not contain enough information" in answer.lower()
 
 
+def classify_ui_answer_status(answer: str, sources: list[dict[str, Any]]) -> str:
+    if is_insufficient_context(answer):
+        return "insufficient_context"
+    if sources:
+        return "answered"
+    return "unverified_sources"
+
+
 def render_sources(sources: list[dict[str, Any]], developer_mode: bool) -> None:
     if not sources:
         return
@@ -448,6 +490,24 @@ def render_sources(sources: list[dict[str, Any]], developer_mode: bool) -> None:
             if developer_mode:
                 st.write(f"chunk_id: `{source.get('chunk_id')}`")
                 st.json(source, expanded=False)
+
+
+def render_related_context(retrieved_context: list[dict[str, Any]]) -> None:
+    if not retrieved_context:
+        return
+
+    st.markdown("**Related retrieved passages**")
+    for index, source in enumerate(retrieved_context, start=1):
+        section_item = source.get("section_item") or "UNKNOWN"
+        section_title = source.get("section_title") or "Untitled section"
+        with st.expander(
+            f"Retrieved {index}: Item {section_item} - {section_title}",
+            expanded=False,
+        ):
+            st.write(f"chunk_id: `{source.get('chunk_id')}`")
+            st.write(f"Page: `{_page_range(source)}`")
+            st.write(source.get("preview") or "")
+            st.json(source, expanded=False)
 
 
 def render_retriever_debug(healthy: bool, settings: dict[str, Any]) -> None:
