@@ -1,0 +1,165 @@
+{
+  "total_cases": 3,
+  "passed_cases": 2,
+  "failed_cases": 0,
+  "skipped_cases": 1,
+  "hit_at_k": 1.0,
+  "mrr_at_k": 0.75,
+  "case_results": [
+    {
+      "case_id": "aapl_2023_revenue_keyword",
+      "status": "passed",
+      "question": "What does Apple say about net sales and gross margin?",
+      "collection_name": null,
+      "retriever_type": "keyword_jsonl",
+      "top_k": 5,
+      "first_match_rank": 2,
+      "hit": true,
+      "mrr": 0.5,
+      "term_match_rate": 0.6666666666666666,
+      "matched_terms": [
+        "gross margin",
+        "net sales"
+      ],
+      "retrieved_chunks": [
+        {
+          "rank": 1,
+          "score": 15.0,
+          "chunk_id": "item-7A-text-001",
+          "section_item": "7A",
+          "chunk_type": "section_text",
+          "page_start": 29,
+          "page_end": 29,
+          "short_preview": "[TABLE 0: 4 rows x 1 columns stored as separate table chunk] Foreign Exchange Rate Risk The Company’s exposure to foreign exchange rate risk relates primarily to the Company being a net receiver of currencies other than the U.S. dollar. Cha"
+        },
+        {
+          "rank": 2,
+          "score": 14.0,
+          "chunk_id": "item-7-table-011",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "short_preview": "Services gross margin increased during 2023 compared to 2022 due primarily to higher Services net sales, partially offset by the weakness in foreign currenciesrelative to the U.S. dollar and higher Services costs. Services gross margin perc"
+        },
+        {
+          "rank": 3,
+          "score": 12.0,
+          "chunk_id": "item-1A-text-058",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "short_preview": "Financial Risks The Company expects its quarterly net sales and results of operations to fluctuate. The Company’s profit margins vary across its products, services, geographic segments and distribution channels. For example, the gross margi"
+        },
+        {
+          "rank": 4,
+          "score": 12.0,
+          "chunk_id": "item-1A-text-060",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "short_preview": "Company could also be subject to unexpected developments, such as lower-than-anticipated demand for the Company’s products or services, issues with newproduct or service introductions, information technology system failures or network disru"
+        },
+        {
+          "rank": 5,
+          "score": 12.0,
+          "chunk_id": "item-8-text-012",
+          "section_item": "8",
+          "chunk_type": "section_text",
+          "page_start": 30,
+          "page_end": 54,
+          "short_preview": "based on the gross amount billed to customers. The Company considers multiple factors when determining whether it obtains control of third-party products,including evaluating if it can establish the price of the product, retains inventory r"
+        }
+      ],
+      "issues": []
+    },
+    {
+      "case_id": "amzn_2022_cash_flow_keyword",
+      "status": "passed",
+      "question": "Where is net cash provided by operating activities reported?",
+      "collection_name": null,
+      "retriever_type": "keyword_jsonl",
+      "top_k": 5,
+      "first_match_rank": 1,
+      "hit": true,
+      "mrr": 1.0,
+      "term_match_rate": 0.6666666666666666,
+      "matched_terms": [
+        "cash",
+        "operating activities"
+      ],
+      "retrieved_chunks": [
+        {
+          "rank": 1,
+          "score": 23.0,
+          "chunk_id": "item-7-table-018",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 41,
+          "short_preview": "2021 2022 Net cash provided by (used in) operating activities $ 46,327 $ 46,752 Purchases of property and equipment, net of proceeds from sales and incentives (55,396) (58,321) Free cash flow $ (9,069) $ (11,569) Net cash provided by (used "
+        },
+        {
+          "rank": 2,
+          "score": 23.0,
+          "chunk_id": "item-7-table-019",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 41,
+          "short_preview": "2021 2022 Net cash provided by (used in) operating activities $ 46,327 $ 46,752 Purchases of property and equipment, net of proceeds from sales and incentives (55,396) (58,321) Free cash flow (9,069) (11,569) Principal repayments of finance"
+        },
+        {
+          "rank": 3,
+          "score": 23.0,
+          "chunk_id": "item-7-table-020",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 41,
+          "short_preview": "2021 2022 Net cash provided by (used in) operating activities $ 46,327 $ 46,752 Purchases of property and equipment, net of proceeds from sales and incentives (55,396) (58,321) Free cash flow (9,069) (11,569) Equipment acquired under financ"
+        },
+        {
+          "rank": 4,
+          "score": 21.0,
+          "chunk_id": "item-7-text-040",
+          "section_item": "7",
+          "chunk_type": "section_text",
+          "page_start": 30,
+          "page_end": 41,
+          "short_preview": "Free Cash Flow Free cash flow is cash flow from operations reduced by “Purchases of property and equipment, net of proceeds from sales and incentives.” The following is a reconciliation of free cash flow to the most comparable GAAP cash flo"
+        },
+        {
+          "rank": 5,
+          "score": 21.0,
+          "chunk_id": "item-7-text-041",
+          "section_item": "7",
+          "chunk_type": "section_text",
+          "page_start": 30,
+          "page_end": 41,
+          "short_preview": "comparable GAAP cash flow measure, “Net cash provided by (used in) operating activities,” for 2021 and 2022 (in millions): Year Ended December 31, [TABLE 19: 9 rows x 3 columns stored as separate table chunk] 28"
+        }
+      ],
+      "issues": []
+    },
+    {
+      "case_id": "aapl_2023_revenue_vector",
+      "status": "skipped",
+      "question": "What were the drivers of net sales?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "retriever_type": "vector",
+      "top_k": 5,
+      "first_match_rank": null,
+      "hit": false,
+      "mrr": 0.0,
+      "term_match_rate": 0.0,
+      "matched_terms": [],
+      "retrieved_chunks": [],
+      "issues": [
+        "Collection 'findoc_nasdaq_aapl_2023' is not indexed. Build or rebuild it before vector eval."
+      ]
+    }
+  ]
+}

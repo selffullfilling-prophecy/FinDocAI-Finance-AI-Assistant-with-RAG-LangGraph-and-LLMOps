@@ -3,6 +3,7 @@ from langchain_core.documents import Document
 from app.rag.chunk_models import ChunkConfig
 from app.rag.chunk_pipeline import chunk_loaded_10k_documents
 from app.rag.section_detector import detect_10k_sections, join_pages
+from app.rag.splitter import split_large_table_text
 
 
 def test_detect_10k_sections_ignores_table_of_contents_items():
@@ -29,6 +30,46 @@ Revenue increased because of higher demand.
     assert sections[0].text.startswith("Item 1. Business")
 
 
+def test_detect_10k_sections_ignores_index_page_items_with_plain_page_numbers():
+    text = """
+AMAZON.COM, INC.
+FORM 10-K
+INDEX
+
+  Page
+PART I
+Item 1. Business 3
+Item 1A. Risk Factors 6
+PART II
+Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations 19
+PART IV
+Item 16. Form 10-K Summary 74
+
+AMAZON.COM, INC.
+PART I
+Item 1. Business
+Business text.
+
+Item 1A. Risk Factors
+Risk text.
+
+PART II
+Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations
+Net cash provided by operating activities.
+
+PART IV
+Item 16. Form 10-K Summary
+Summary text.
+"""
+
+    sections = detect_10k_sections(text)
+
+    assert [section.item_id for section in sections] == ["1", "1A", "7", "16"]
+    assert sections[0].title == "Business"
+    assert sections[2].title.startswith("Management's Discussion")
+    assert sections[2].text.startswith("Item 7.")
+
+
 def test_detect_10k_sections_skips_backward_item_order():
     text = """
 Item 1. Business
@@ -44,6 +85,57 @@ This line appears after Item 7, so it should not start a new section.
     sections = detect_10k_sections(text)
 
     assert [section.item_id for section in sections] == ["1", "7"]
+
+
+def test_detect_10k_sections_ignores_inline_item_cross_reference():
+    text = """
+Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations
+Further information can be found in Part II,
+Item 8 of this Form 10-K in the Notes to Consolidated Financial Statements.
+The following table shows net sales by reportable segment.
+
+Item 7A. Quantitative and Qualitative Disclosures About Market Risk
+Market risk text.
+
+Item 8. Financial Statements and Supplementary Data
+Consolidated statements text.
+"""
+
+    sections = detect_10k_sections(text)
+
+    assert [section.item_id for section in sections] == ["7", "7A", "8"]
+    assert sections[0].text.startswith("Item 7.")
+    assert "net sales by reportable segment" in sections[0].text
+    assert sections[2].title == "Financial Statements and Supplementary Data"
+
+
+def test_detect_10k_sections_ignores_item_reference_to_part_ii():
+    text = """
+Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations
+See Item 8 of Part II, "Financial Statements and Supplementary Data - Note 1 - Description of Business,"
+for additional discussion.
+
+Item 7A. Quantitative and Qualitative Disclosures About Market Risk
+Market risk text.
+
+Item 8. Financial Statements and Supplementary Data
+Consolidated statements text.
+"""
+
+    sections = detect_10k_sections(text)
+
+    assert [section.item_id for section in sections] == ["7", "7A", "8"]
+    assert "additional discussion" in sections[0].text
+
+
+def test_split_large_table_text_keeps_parts_under_limit():
+    table_text = "\n".join(f"Exhibit {index} long description text" for index in range(30))
+
+    parts = split_large_table_text(table_text, max_chars=180)
+
+    assert len(parts) > 1
+    assert all(len(part) <= 220 for part in parts)
+    assert "Exhibit 0" in parts[0]
 
 
 def test_detect_10k_sections_adds_page_range_metadata():

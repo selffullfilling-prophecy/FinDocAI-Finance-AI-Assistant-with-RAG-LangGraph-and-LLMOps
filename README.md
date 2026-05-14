@@ -1,595 +1,267 @@
-# FinDocGPT — Finance AI Assistant
+# FinDocAI - 10-K RAG Assistant
 
-FinDocGPT is a lightweight **Finance AI Assistant** for reading and analyzing financial documents such as annual reports, financial statements, earnings reports, and business reports.
+FinDocAI is a learning-focused finance RAG project for SEC 10-K reports. It supports upload, section/table-aware chunking, Chroma indexing, hybrid retrieval, reranking, answer generation with citations, Streamlit demo UI, and golden evals.
 
-The goal of this project is to build a small but real **LLM application** that includes:
+> Educational and research use only. This project does not provide investment advice, recommendations, or buy/sell/hold decisions.
 
-- Document ingestion
-- RAG — Retrieval-Augmented Generation
-- LangGraph agent workflow
-- Chroma vector store
-- Citation-based answers
-- Financial guardrails
-- LangSmith tracing
-- MLflow logging
-- RAGAS evaluation
-- FastAPI backend
-- Streamlit frontend
-- Docker, CI, security scan, and monitoring basics
-
-> This project is for learning and research purposes only. It does **not** provide investment advice, stock recommendations, or buy/sell/hold decisions.
-
----
-
-## 1. Target User
-
-The target user is a:
-
-> **Junior financial analyst / investment research intern**
-
-This user needs to read long financial documents, extract useful information, ask questions, calculate financial ratios, and prepare short analyst-style summaries.
-
-FinDocGPT helps the user:
-
-- Upload financial PDF/TXT documents
-- Ask questions about the uploaded documents
-- Get answers grounded in document context
-- View source citations
-- Generate short financial summaries
-- Avoid unsupported financial advice
-
----
-
-## 2. Problem Statement
-
-Financial analysts often spend a lot of time reading long reports and manually extracting key information such as:
-
-- Revenue drivers
-- Business performance
-- Risk factors
-- Management discussion
-- Financial metrics
-- Important events and uncertainties
-
-This process is repetitive, slow, and easy to miss details.
-
-FinDocGPT solves this by using an LLM-powered RAG pipeline to help users search, summarize, and reason over financial documents with citations.
-
----
-
-## 3. System Architecture
-
-The system is divided into three main flows:
-
-1. **Document Ingestion**
-2. **Query & RAG Pipeline**
-3. **Answer Generation**
-
----
-
-## 4. General Flow
-![alt text](data/images/General-Flow.png)
----
-
-## 5. Layered Architecture
-
-| Layer | Responsibility | Main Files |
-|---|---|---|
-| Frontend Layer | User interface for upload, chat, report generation | `frontend/streamlit_app.py` |
-| API Layer | FastAPI endpoints | `app/main.py`, `app/api/*.py` |
-| Core Layer | Config, security, logging, rate limiting | `app/core/*.py` |
-| Schema Layer | Request/response models | `app/schemas/*.py` |
-| Service Layer | Business logic orchestration | `app/services/*.py` |
-| Agent Layer | LangGraph workflow and tools | `app/agent/*.py` |
-| RAG Layer | Loading, splitting, embedding, retrieval | `app/rag/*.py` |
-| Data Layer | Raw files, processed chunks, Chroma DB | `data/raw`, `data/processed`, `data/chroma` |
-| Evaluation / LLMOps Layer | RAGAS, LangSmith, MLflow logging | `evals/*`, `app/services/eval_logger.py` |
-| DevOps / Monitoring Layer | Docker, GitHub Actions, Prometheus, Grafana | `Dockerfile`, `docker-compose.yml`, `.github/workflows/*`, `monitoring/*` |
-
----
-
-## 6. Main Features
-
-### Document Ingestion
-
-- Upload PDF/TXT files
-- Read document content
-- Split content into chunks
-- Convert chunks into embeddings
-- Store embeddings and metadata in Chroma
-
-### RAG Chat
-
-- Ask questions about uploaded documents
-- Retrieve top-k relevant chunks
-- Generate answers using LLM
-- Return answer with citations
-
-### LangGraph Agent
-
-The agent workflow includes:
+## Current Flow
 
 ```text
-START
-↓
-guardrail_node
-↓
-retrieve_node
-↓
-tool_node
-↓
-generate_node
-↓
-citation_node
-↓
-END
+10-K PDF/TXT
+-> load pages
+-> detect 10-K sections
+-> split section/table chunks
+-> write chunk JSONL + chunk eval
+-> index chunks into Chroma
+-> retrieve candidates by vector / keyword / hybrid
+-> optional heuristic reranking
+-> build grounded RAG prompt
+-> NVIDIA LLM answer
+-> answer + source citations
 ```
 
-### Financial Tools
+## Setup
 
-The assistant may call simple financial calculation tools:
-
-- `calculate_revenue_growth`
-- `calculate_gross_margin`
-- `calculate_operating_margin`
-- `calculate_net_margin`
-
-### Guardrails
-
-The system should block or redirect:
-
-- Direct investment advice
-- Buy/sell/hold recommendations
-- Certain price prediction requests
-- Prompt injection attempts
-- Requests to reveal API keys or system prompts
-
-Example safe response:
-
-```text
-I can analyze the information in the provided financial documents, but I cannot provide personal investment advice or buy/sell recommendations.
+```powershell
+cd C:\Users\Admin\Documents\findocAI
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
----
-
-## 7. Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | FastAPI |
-| Frontend | Streamlit |
-| LLM | Gemini / OpenAI / Groq |
-| RAG Framework | LangChain |
-| Agent Framework | LangGraph |
-| Vector Store | Chroma |
-| Embedding | sentence-transformers or provider embedding API |
-| Tracing | LangSmith |
-| Logging / Experiments | MLflow |
-| Evaluation | RAGAS |
-| Security | API key, rate limit, Bandit, pip-audit, Trivy |
-| Deployment | Docker Compose |
-| Monitoring | Prometheus + Grafana |
-
----
-
-## 8. Project Structure
-
-```text
-findocgpt/
-├── app/
-│   ├── main.py
-│   ├── api/
-│   │   ├── routes_chat.py
-│   │   ├── routes_upload.py
-│   │   ├── routes_report.py
-│   │   ├── routes_health.py
-│   │   └── routes_metrics.py
-│   │
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── security.py
-│   │   ├── logging.py
-│   │   └── rate_limit.py
-│   │
-│   ├── rag/
-│   │   ├── loader.py
-│   │   ├── splitter.py
-│   │   ├── embeddings.py
-│   │   ├── vector_store.py
-│   │   ├── retriever.py
-│   │   └── prompts.py
-│   │
-│   ├── agent/
-│   │   ├── graph.py
-│   │   ├── state.py
-│   │   ├── nodes.py
-│   │   └── tools.py
-│   │
-│   ├── services/
-│   │   ├── chat_service.py
-│   │   ├── report_service.py
-│   │   ├── citation_service.py
-│   │   ├── guardrail_service.py
-│   │   └── eval_logger.py
-│   │
-│   └── schemas/
-│       ├── chat.py
-│       ├── upload.py
-│       ├── report.py
-│       └── common.py
-│
-├── frontend/
-│   └── streamlit_app.py
-│
-├── evals/
-│   ├── golden_questions.json
-│   ├── run_ragas_eval.py
-│   └── sample_eval_output.json
-│
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── chroma/
-│
-├── tests/
-│   ├── test_splitter.py
-│   ├── test_financial_tools.py
-│   ├── test_guardrails.py
-│   ├── test_chat_api.py
-│   └── test_upload_api.py
-│
-├── monitoring/
-│   ├── prometheus.yml
-│   └── grafana-dashboard.json
-│
-├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       └── security.yml
-│
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-├── README.md
-├── SECURITY.md
-└── Makefile
-```
-
----
-
-## 9. API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/health` | Check API health |
-| `GET` | `/metrics` | Expose Prometheus metrics |
-| `POST` | `/upload` | Upload and index a financial document |
-| `POST` | `/chat` | Ask a question about uploaded documents |
-| `POST` | `/report` | Generate an analyst-style summary |
-| `POST` | `/eval/run` | Run evaluation if implemented as API |
-
----
-
-## 10. Example Chat Response
-
-```json
-{
-  "answer": "The company reports that revenue growth was mainly driven by product sales and service expansion...",
-  "sources": [
-    {
-      "file_name": "annual_report.pdf",
-      "page": 12,
-      "chunk_id": "chunk_001"
-    }
-  ],
-  "used_tools": [],
-  "confidence": 0.82
-}
-```
-
----
-
-## 11. Environment Variables
-
-Create a `.env` file based on `.env.example`.
+Create or update `.env`:
 
 ```env
-APP_NAME=FinDocGPT
-ENV=development
-
-# LLM provider — nhà cung cấp mô hình ngôn ngữ lớn
 LLM_PROVIDER=nvidia
-
-# NVIDIA API configuration
 NVIDIA_API_KEY=your_nvidia_api_key_here
 NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_MODEL=deepseek-ai/deepseek-v4-flash
-
-# LLM generation settings — cấu hình sinh câu trả lời
-NVIDIA_TEMPERATURE=1
+NVIDIA_TEMPERATURE=0.2
 NVIDIA_TOP_P=0.95
-NVIDIA_MAX_TOKENS=16384
-
-# Reasoning settings — cấu hình suy luận nếu model hỗ trợ
-NVIDIA_REASONING_ENABLED=true
+NVIDIA_MAX_TOKENS=4096
+NVIDIA_REASONING_ENABLED=false
 NVIDIA_REASONING_EFFORT=high
 
-# Embedding provider — mô hình tạo vector cho RAG
 EMBEDDING_PROVIDER=sentence_transformers
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-
-# Optional alternative providers
-# GEMINI_API_KEY=your_gemini_key_here
-# GROQ_API_KEY=your_groq_key_here
-# OPENAI_API_KEY=your_openai_key_here
-
-# Vector database — nơi lưu vector/chunk
 CHROMA_PERSIST_DIR=data/chroma
 
-# API security — bảo mật API nội bộ của app
-API_KEY=dev-secret-key
-RATE_LIMIT_PER_MINUTE=30
-
-# LangSmith tracing — theo dõi trace/dấu vết chạy của LangChain/LangGraph
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_langsmith_key_here
-LANGCHAIN_PROJECT=findocgpt-dev
-
-# MLflow tracking — lưu config/result/evaluation
-MLFLOW_TRACKING_URI=http://localhost:5000
+RAG_MAX_CHARS_PER_CHUNK=1800
+RAG_MAX_TOTAL_CONTEXT_CHARS=12000
+RERANK_ENABLED=true
+RERANK_TOP_K=5
 ```
 
----
+The first Chroma indexing run may download the embedding model if it is not cached.
 
-## 12. Local Setup
+## Run
 
-### 1. Clone repository
+Start FastAPI:
 
-```bash
-git clone <your-repo-url>
-cd findocgpt
+```powershell
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 2. Create virtual environment
+Start Streamlit:
 
-```bash
-python -m venv .venv
-```
-
-Activate on Windows PowerShell:
-
-```bash
-.\.venv\Scripts\Activate.ps1
-```
-
-Activate on macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Run FastAPI backend
-
-```bash
-uvicorn app.main:app --reload
-```
-
-### 5. Run Streamlit frontend
-
-```bash
+```powershell
 streamlit run frontend/streamlit_app.py
 ```
 
----
-
-## 13. Docker Compose
-
-Run the system with Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-Expected services:
-
-- FastAPI backend
-- Streamlit frontend
-- MLflow
-- Prometheus
-- Grafana
-
----
-
-## 14. Evaluation
-
-RAG evaluation is handled by RAGAS.
-
-Example evaluation flow:
+Open:
 
 ```text
-evals/golden_questions.json
-↓
-evals/run_ragas_eval.py
-↓
-chat_service.py
-↓
-RAGAS metrics
-↓
-MLflow logging
-↓
-evals/sample_eval_output.json
+http://127.0.0.1:8501
 ```
 
-Main metrics:
+Demo workflow:
 
-| Metric | Meaning |
-|---|---|
-| Faithfulness | Whether the answer is grounded in retrieved context |
-| Answer Relevancy | Whether the answer addresses the question |
-| Context Precision | Whether retrieved chunks are relevant |
-| Context Recall | Whether enough relevant context is retrieved |
+1. Open `Upload & Index`.
+2. Upload a 10-K PDF/TXT.
+3. Keep `Index into Chroma` enabled.
+4. Copy or use the returned `collection_name`.
+5. Open `Retriever Debug` to compare `vector`, `keyword`, and `hybrid`.
+6. Open `Chat with Document`.
+7. Ask questions with streaming on and inspect sources.
 
-Run evaluation:
+## API
 
-```bash
-python evals/run_ragas_eval.py
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Health check |
+| `POST` | `/upload` | Upload, chunk, eval, optionally index into Chroma |
+| `POST` | `/retrieve` | Debug retrieval with vector/keyword/hybrid and optional rerank |
+| `POST` | `/chat` | Non-streaming RAG answer generation |
+| `POST` | `/chat/stream` | Streaming RAG answer generation as SSE |
+| `GET` | `/chat/sessions/{session_id}` | Read recent in-memory chat history |
+| `DELETE` | `/chat/sessions/{session_id}` | Clear in-memory chat history |
+
+Upload and index:
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/upload" `
+  -F "file=@C:\Users\Admin\Documents\findocAI\data\images\raw\reports\NASDAQ_AAPL_2023.pdf" `
+  -F "index_to_chroma=true"
 ```
 
----
+Retriever debug:
 
-## 15. Security
+```powershell
+$body = @{
+  question = "What were the drivers of net sales?"
+  collection_name = "findoc_nasdaq_aapl_2023"
+  retrieval_mode = "hybrid"
+  rerank = $true
+  top_k = 5
+  candidate_k = 20
+  with_score = $true
+} | ConvertTo-Json -Compress
 
-Security checks include:
-
-- API key validation
-- Rate limiting
-- Input validation
-- File type validation
-- No `.env` commit
-- Bandit for Python security scan
-- pip-audit for dependency vulnerability scan
-- Trivy for filesystem/container scan
-
-Run basic security checks:
-
-```bash
-bandit -r app
-pip-audit -r requirements.txt
-trivy fs .
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/retrieve" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
----
+Chat:
 
-## 16. Monitoring
+```powershell
+$body = @{
+  question = "What were the drivers of net sales?"
+  collection_name = "findoc_nasdaq_aapl_2023"
+  retrieval_mode = "hybrid"
+  rerank = $true
+  top_k = 5
+  candidate_k = 20
+  session_id = "demo-session"
+  use_memory = $true
+} | ConvertTo-Json -Compress
 
-Monitoring is handled by Prometheus and Grafana.
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/chat" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
 
-The backend exposes:
+## Retrieval Modes
+
+`vector` uses Chroma similarity search with embedding scores.
+
+`keyword` reads documents from the Chroma collection and scores query terms deterministically.
+
+`hybrid` merges vector and keyword candidates by `chunk_id`, normalizes scores, and computes:
 
 ```text
-GET /metrics
+hybrid_score = 0.65 * vector_norm + 0.35 * keyword_norm
 ```
 
-Prometheus config:
+## Reranking
 
-```text
-monitoring/prometheus.yml
+The default reranker is deterministic and does not load an external model. It boosts:
+
+- exact query term matches
+- metadata section filters
+- table chunks for cash flow / statement / balance sheet questions
+- Item 7 for revenue, net sales, growth, margin, MD&A questions
+- Item 8 for cash flow, assets, liabilities, consolidated statement questions
+
+## Conversation Memory
+
+Chat memory is in-memory per `session_id`. It stores recent user/assistant turns and sources. It is useful for the demo, but it is not a production database-backed memory layer.
+
+Clear memory:
+
+```powershell
+Invoke-RestMethod -Method Delete -Uri "http://127.0.0.1:8000/chat/sessions/demo-session"
 ```
 
-Grafana dashboard:
+## Source Attribution Policy
 
-```text
-monitoring/grafana-dashboard.json
+FinDocAI separates retrieval context from cited sources:
+
+- `retrieved_context` is the top-k context sent to the LLM. These passages are useful for Developer Mode and debugging.
+- `sources` contains only the chunks explicitly cited by the answer with valid `[Source N]` citations.
+- If the answer is insufficient, `answer_status = "insufficient_context"` and `sources = []`.
+- If the answer makes claims without valid citations, `answer_status = "unverified_sources"` and `sources = []`.
+- User Mode displays only supporting `sources`.
+- Developer Mode may show `retrieved_context` as related retrieved passages, but they are not called sources.
+
+Example:
+
+```json
+{
+  "question": "What was Apple's weighted average interest rate in 2024?",
+  "answer_status": "insufficient_context",
+  "sources": []
+}
 ```
 
-Basic metrics:
+Developer Mode may still show related retrieved passages from another period, such as 2023, for debugging. Those passages are not treated as sources unless the answer cites them directly and they support the specific claim.
 
-- Request count
-- Request latency
-- Error count
-- Chat endpoint latency
-- Upload endpoint count
+## Golden Evals
 
----
+Chunking eval:
 
-## 17. CI/CD
-
-GitHub Actions workflows:
-
-```text
-.github/workflows/ci.yml
-.github/workflows/security.yml
+```powershell
+python -m app.rag.eval.chunking_eval --cases tests/golden/chunking_cases.json --output data/eval/chunking_golden_report.json
 ```
 
-### CI workflow
+Retriever eval:
 
-Expected tasks:
+```powershell
+python -m app.rag.eval.retriever_eval --cases tests/golden/retriever_cases.json --output data/eval/retriever_golden_report.json
+```
 
-- Install dependencies
-- Run lint
-- Run tests
-- Build Docker image
+Answer eval is skipped by default because it may call the live NVIDIA LLM. Run it explicitly:
 
-### Security workflow
+```powershell
+$env:RUN_LLM_EVAL="1"
+python -m app.rag.eval.answer_eval --cases tests/golden/answer_cases.json --output data/eval/answer_golden_report.json
+```
 
-Expected tasks:
+Without `RUN_LLM_EVAL=1`, answer eval reports live cases as skipped.
 
-- Bandit scan
-- pip-audit scan
-- Trivy filesystem scan
-- Trivy image scan
+## Tests
 
----
+Run targeted RAG demo tests:
 
-## 18. Current MVP Scope
+```powershell
+pytest tests/test_llm_client.py tests/test_hybrid_retriever.py tests/test_reranker.py tests/test_conversation_memory.py tests/test_answer_service.py tests/test_routes_chat.py tests/test_answer_golden_eval.py
+```
 
-The MVP focuses on:
+Run all tests:
 
-- Upload PDF/TXT
-- Parse and chunk document
-- Store embeddings in Chroma
-- Ask questions using RAG
-- Generate answers with citations
-- Use LangGraph agent flow
-- Apply financial guardrails
-- Log traces with LangSmith
-- Log evaluation results with MLflow
-- Run RAGAS evaluation
-- Provide Docker and CI/security basics
+```powershell
+pytest
+```
 
----
+Unit tests do not call NVIDIA, Chroma, or embedding models unless explicitly mocked for that test.
 
-## 19. Out of Scope for MVP
+## Main Files
 
-The following features are not included in the first MVP:
+| Area | Files |
+| --- | --- |
+| Chunking | `app/rag/loader.py`, `section_detector.py`, `table_detector.py`, `splitter.py`, `chunk_pipeline.py` |
+| Artifacts | `app/rag/chunk_artifacts.py` |
+| Vector store | `app/rag/vector_store.py` |
+| Keyword retrieval | `app/rag/keyword_retriever.py` |
+| Hybrid retrieval | `app/rag/hybrid_retriever.py` |
+| Reranking | `app/rag/reranker.py` |
+| Memory | `app/rag/conversation_memory.py` |
+| Prompting | `app/rag/prompt_builder.py` |
+| LLM client | `app/rag/llm_client.py` |
+| Answer service | `app/rag/answer_service.py` |
+| APIs | `app/api/routes_upload.py`, `routes_retrieval.py`, `routes_chat.py` |
+| Streamlit | `frontend/streamlit_app.py` |
+| Golden evals | `app/rag/eval/*.py`, `tests/golden/*.json` |
 
-- Real-time stock price prediction
-- Buy/sell/hold recommendations
-- Full SEC EDGAR integration
+## Known Non-Goals For This Phase
+
+- MLOps
+- MLflow integration
+- cloud deployment
+- auth and user management
+- production database memory
 - React frontend
-- Multi-user authentication
-- Kubernetes deployment
-- Fine-tuning LLMs
-- Multi-agent research workflow
-
----
-
-## 20. Roadmap
-
-### Phase 1 — MVP
-
-- Upload documents
-- RAG chat with citations
-- LangGraph agent
-- Financial guardrails
-- Streamlit UI
-
-### Phase 2 — LLMOps
-
-- RAGAS evaluation
-- LangSmith tracing
-- MLflow experiment logging
-- More test cases
-
-### Phase 3 — Production Improvements
-
-- Better authentication
-- Better document parser
-- SEC EDGAR API integration
-- Better observability dashboard
-- Cloud deployment
-
----
-
-## 21. Disclaimer
-
-This project is for educational and research purposes only.
-
-FinDocGPT does not provide financial advice, investment recommendations, or predictions of future stock prices. Users should verify all information from original financial documents and consult qualified professionals before making financial decisions.

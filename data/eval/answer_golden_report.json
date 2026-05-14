@@ -1,0 +1,45 @@
+{
+  "total_cases": 2,
+  "passed_cases": 0,
+  "failed_cases": 0,
+  "skipped_cases": 2,
+  "citation_rate": 0.0,
+  "source_section_hit_rate": 0.0,
+  "term_match_rate": 0.0,
+  "case_results": [
+    {
+      "case_id": "aapl_2023_net_sales_answer",
+      "status": "skipped",
+      "question": "What drove Apple's net sales?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "answer": "",
+      "answer_status": "",
+      "sources": [],
+      "matched_terms": [],
+      "missing_terms": [],
+      "citation_present": false,
+      "source_section_hit": false,
+      "term_match_rate": 0.0,
+      "issues": [
+        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+      ]
+    },
+    {
+      "case_id": "aapl_2024_weighted_average_interest_rate_insufficient",
+      "status": "skipped",
+      "question": "What was Apple's weighted average interest rate in 2024?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "answer": "",
+      "answer_status": "",
+      "sources": [],
+      "matched_terms": [],
+      "missing_terms": [],
+      "citation_present": false,
+      "source_section_hit": false,
+      "term_match_rate": 0.0,
+      "issues": [
+        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+      ]
+    }
+  ]
+}

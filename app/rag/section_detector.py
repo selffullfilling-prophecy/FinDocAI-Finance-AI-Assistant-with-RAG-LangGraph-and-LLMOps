@@ -50,7 +50,27 @@ ITEM_HEADING_RE = re.compile(
 )
 
 TOC_WINDOW_CHARS = 15_000
-TOC_TITLE_RE = re.compile(r"(?:\.{2,}|\s{2,})\s*\d{1,4}\s*$")
+TOC_CONTEXT_CHARS = 3_000
+TOC_CONTEXT_RE = re.compile(r"(?im)(table\s+of\s+contents|^\s*index\s*$)")
+TOC_TITLE_RE = re.compile(r"(?:\.{2,}|\s{2,}|\s+)\d{1,4}\s*$")
+REFERENCE_TITLE_PREFIXES = {
+    "about",
+    "above",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "of",
+    "on",
+    "regarding",
+    "under",
+    "with",
+    "within",
+}
 
 
 def normalize_item_id(item_id: str) -> str:
@@ -111,8 +131,8 @@ def find_page_range_for_offsets(
 
 
 def _has_toc_context(match: re.Match[str], full_text: str) -> bool:
-    before_match = full_text[max(0, match.start() - 2_000) : match.start()].lower()
-    return "table of contents" in before_match or "contents" in before_match
+    before_match = full_text[max(0, match.start() - TOC_CONTEXT_CHARS) : match.start()]
+    return bool(TOC_CONTEXT_RE.search(before_match))
 
 
 def _looks_like_toc_heading(match: re.Match[str], full_text: str) -> bool:
@@ -124,9 +144,6 @@ def _looks_like_toc_heading(match: re.Match[str], full_text: str) -> bool:
 
     Real section headings usually do not end with a page number.
     """
-
-    if match.start() > TOC_WINDOW_CHARS:
-        return False
 
     line = full_text[match.start() : match.end()].strip()
     title = (match.group("title") or "").strip()
@@ -169,7 +186,8 @@ def _filter_table_of_contents_matches(
             and _has_toc_context(match, full_text)
             and _has_later_same_item(match, matches)
         )
-        if _looks_like_toc_heading(match, full_text) or is_early_duplicate:
+        is_index_duplicate = _has_toc_context(match, full_text) and _has_later_same_item(match, matches)
+        if _looks_like_toc_heading(match, full_text) or is_early_duplicate or is_index_duplicate:
             continue
 
         filtered.append(match)
@@ -204,6 +222,31 @@ def _filter_implausible_item_order(matches: list[re.Match[str]]) -> list[re.Matc
     return filtered
 
 
+def _looks_like_reference_not_heading(match: re.Match[str]) -> bool:
+    """Reject inline cross-references that text extraction moved to line start.
+
+    Example:
+        Item 8 of this Form 10-K in the Notes to Consolidated Financial...
+
+    A real 10-K section heading should start with a section title, not a
+    preposition or connector word.
+    """
+
+    title = (match.group("title") or "").strip()
+    if not title:
+        return True
+
+    first_word_match = re.match(r"[A-Za-z]+", title)
+    if not first_word_match:
+        return False
+
+    return first_word_match.group(0).lower() in REFERENCE_TITLE_PREFIXES
+
+
+def _filter_reference_headings(matches: list[re.Match[str]]) -> list[re.Match[str]]:
+    return [match for match in matches if not _looks_like_reference_not_heading(match)]
+
+
 def detect_10k_sections(full_text: str, page_offsets: dict[int, int] | None = None) -> list[SectionSpan]:
     """Detect 10-K sections using Item headings.
 
@@ -216,7 +259,8 @@ def detect_10k_sections(full_text: str, page_offsets: dict[int, int] | None = No
 
     raw_matches = list(ITEM_HEADING_RE.finditer(full_text))
     toc_filtered_matches = _filter_table_of_contents_matches(raw_matches, full_text)
-    matches = _filter_implausible_item_order(toc_filtered_matches)
+    reference_filtered_matches = _filter_reference_headings(toc_filtered_matches)
+    matches = _filter_implausible_item_order(reference_filtered_matches)
     sections: list[SectionSpan] = []
 
     for index, match in enumerate(matches):

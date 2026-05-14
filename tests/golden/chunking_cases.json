@@ -1,0 +1,58 @@
+[
+  {
+    "case_id": "aapl_2023_chunking_core",
+    "document_path": "data/images/raw/reports/NASDAQ_AAPL_2023.pdf",
+    "expected_sections": ["1", "1A", "7", "8", "4"],
+    "required_metadata_fields": [
+      "chunk_id",
+      "chunk_type",
+      "section_item",
+      "section_title"
+    ],
+    "max_unknown_section_ratio": 0.05,
+    "min_table_chunks": 1,
+    "must_contain": [
+      {
+        "section_item": "7",
+        "terms": ["net sales", "gross margin"]
+      },
+      {
+        "section_item": "8",
+        "terms": ["consolidated statements", "cash flows"]
+      }
+    ],
+    "must_not_contain_global_terms": ["table of contents"]
+  },
+  {
+    "case_id": "amzn_2022_chunking_core",
+    "document_path": "data/images/raw/reports/NASDAQ_AMZN_2022.pdf",
+    "expected_sections": ["1", "1A", "7", "8"],
+    "required_metadata_fields": [
+      "chunk_id",
+      "chunk_type",
+      "section_item",
+      "section_title"
+    ],
+    "max_unknown_section_ratio": 0.05,
+    "min_table_chunks": 1,
+    "must_contain": [
+      {
+        "section_item": "7",
+        "terms": ["net sales", "operating income"]
+      },
+      {
+        "section_item": "8",
+        "terms": ["consolidated statements", "cash flows"]
+      }
+    ],
+    "must_not_contain_global_terms": ["table of contents"]
+  },
+  {
+    "case_id": "missing_document_example",
+    "document_path": "data/raw/DOES_NOT_EXIST_10K.pdf",
+    "expected_sections": ["1", "1A", "7", "8"],
+    "required_metadata_fields": ["chunk_id", "chunk_type", "section_item", "section_title"],
+    "max_unknown_section_ratio": 0.05,
+    "min_table_chunks": 1
+  }
+]
