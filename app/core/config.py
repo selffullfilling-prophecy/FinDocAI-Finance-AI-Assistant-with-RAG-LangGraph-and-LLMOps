@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
-    nvidia_temperature: float = 1.0
+    nvidia_temperature: float = 0.2
     nvidia_top_p: float = 0.95
     nvidia_max_tokens: int = 4096
     nvidia_reasoning_enabled: bool = True

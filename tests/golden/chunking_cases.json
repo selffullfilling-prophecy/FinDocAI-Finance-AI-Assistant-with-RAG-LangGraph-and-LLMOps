@@ -2,7 +2,7 @@
   {
     "case_id": "aapl_2023_chunking_core",
     "document_path": "data/images/raw/reports/NASDAQ_AAPL_2023.pdf",
-    "expected_sections": ["1", "1A", "7", "8"],
+    "expected_sections": ["1", "1A", "7", "8", "4"],
     "required_metadata_fields": [
       "chunk_id",
       "chunk_type",

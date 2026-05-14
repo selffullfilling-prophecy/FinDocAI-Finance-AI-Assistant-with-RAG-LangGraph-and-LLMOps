@@ -1,14 +1,14 @@
 {
   "total_cases": 3,
-  "passed_cases": 2,
-  "failed_cases": 0,
+  "passed_cases": 1,
+  "failed_cases": 1,
   "skipped_cases": 1,
-  "pass_rate": 1.0,
-  "summary_score": 100.0,
+  "pass_rate": 0.5,
+  "summary_score": 50.0,
   "case_results": [
     {
       "case_id": "aapl_2023_chunking_core",
-      "status": "passed",
+      "status": "failed",
       "document_path": "data/images/raw/reports/NASDAQ_AAPL_2023.pdf",
       "total_chunks": 361,
       "found_sections": [
@@ -35,7 +35,9 @@
         "section_text": 218
       },
       "unknown_section_ratio": 0.0,
-      "issues": []
+      "issues": [
+        "Missing expected sections: 4."
+      ]
     },
     {
       "case_id": "amzn_2022_chunking_core",

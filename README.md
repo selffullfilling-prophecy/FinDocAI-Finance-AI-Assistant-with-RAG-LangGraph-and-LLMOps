@@ -1,595 +1,417 @@
-# FinDocGPT — Finance AI Assistant
+# FinDocAI — 10-K RAG Assistant
 
-FinDocGPT is a lightweight **Finance AI Assistant** for reading and analyzing financial documents such as annual reports, financial statements, earnings reports, and business reports.
+FinDocAI is a learning-focused finance RAG project for ingesting, chunking, indexing, retrieving, and evaluating SEC 10-K reports.
 
-The goal of this project is to build a small but real **LLM application** that includes:
+The current implementation focuses on the ingestion and retrieval foundation:
 
-- Document ingestion
-- RAG — Retrieval-Augmented Generation
-- LangGraph agent workflow
-- Chroma vector store
-- Citation-based answers
-- Financial guardrails
-- LangSmith tracing
-- MLflow logging
-- RAGAS evaluation
-- FastAPI backend
-- Streamlit frontend
-- Docker, CI, security scan, and monitoring basics
+- PDF/TXT 10-K upload
+- 10-K section-aware chunking
+- table-aware chunking
+- JSONL chunk artifacts
+- deterministic chunk quality eval
+- keyword retrieval over chunk JSONL
+- Chroma vector store indexing
+- vector retrieval with debug scores
+- golden chunking eval
+- golden retriever eval
+- Streamlit QA interface
 
-> This project is for learning and research purposes only. It does **not** provide investment advice, stock recommendations, or buy/sell/hold decisions.
-
----
-
-## 1. Target User
-
-The target user is a:
-
-> **Junior financial analyst / investment research intern**
-
-This user needs to read long financial documents, extract useful information, ask questions, calculate financial ratios, and prepare short analyst-style summaries.
-
-FinDocGPT helps the user:
-
-- Upload financial PDF/TXT documents
-- Ask questions about the uploaded documents
-- Get answers grounded in document context
-- View source citations
-- Generate short financial summaries
-- Avoid unsupported financial advice
+> This project is for research and education only. It does not provide investment advice, stock recommendations, or buy/sell/hold decisions.
 
 ---
 
-## 2. Problem Statement
+## Current Status
 
-Financial analysts often spend a lot of time reading long reports and manually extracting key information such as:
-
-- Revenue drivers
-- Business performance
-- Risk factors
-- Management discussion
-- Financial metrics
-- Important events and uncertainties
-
-This process is repetitive, slow, and easy to miss details.
-
-FinDocGPT solves this by using an LLM-powered RAG pipeline to help users search, summarize, and reason over financial documents with citations.
-
----
-
-## 3. System Architecture
-
-The system is divided into three main flows:
-
-1. **Document Ingestion**
-2. **Query & RAG Pipeline**
-3. **Answer Generation**
-
----
-
-## 4. General Flow
-![alt text](data/images/General-Flow.png)
----
-
-## 5. Layered Architecture
-
-| Layer | Responsibility | Main Files |
-|---|---|---|
-| Frontend Layer | User interface for upload, chat, report generation | `frontend/streamlit_app.py` |
-| API Layer | FastAPI endpoints | `app/main.py`, `app/api/*.py` |
-| Core Layer | Config, security, logging, rate limiting | `app/core/*.py` |
-| Schema Layer | Request/response models | `app/schemas/*.py` |
-| Service Layer | Business logic orchestration | `app/services/*.py` |
-| Agent Layer | LangGraph workflow and tools | `app/agent/*.py` |
-| RAG Layer | Loading, splitting, embedding, retrieval | `app/rag/*.py` |
-| Data Layer | Raw files, processed chunks, Chroma DB | `data/raw`, `data/processed`, `data/chroma` |
-| Evaluation / LLMOps Layer | RAGAS, LangSmith, MLflow logging | `evals/*`, `app/services/eval_logger.py` |
-| DevOps / Monitoring Layer | Docker, GitHub Actions, Prometheus, Grafana | `Dockerfile`, `docker-compose.yml`, `.github/workflows/*`, `monitoring/*` |
-
----
-
-## 6. Main Features
-
-### Document Ingestion
-
-- Upload PDF/TXT files
-- Read document content
-- Split content into chunks
-- Convert chunks into embeddings
-- Store embeddings and metadata in Chroma
-
-### RAG Chat
-
-- Ask questions about uploaded documents
-- Retrieve top-k relevant chunks
-- Generate answers using LLM
-- Return answer with citations
-
-### LangGraph Agent
-
-The agent workflow includes:
+The project currently supports this flow:
 
 ```text
-START
-↓
-guardrail_node
-↓
-retrieve_node
-↓
-tool_node
-↓
-generate_node
-↓
-citation_node
-↓
-END
+10-K PDF/TXT
+-> loader.py
+-> section_detector.py
+-> table_detector.py
+-> splitter.py
+-> chunk_pipeline.py
+-> chunk JSONL + chunk eval report
+-> optional embeddings
+-> Chroma vector store
+-> keyword/vector retrieval
+-> golden eval runners
 ```
 
-### Financial Tools
-
-The assistant may call simple financial calculation tools:
-
-- `calculate_revenue_growth`
-- `calculate_gross_margin`
-- `calculate_operating_margin`
-- `calculate_net_margin`
-
-### Guardrails
-
-The system should block or redirect:
-
-- Direct investment advice
-- Buy/sell/hold recommendations
-- Certain price prediction requests
-- Prompt injection attempts
-- Requests to reveal API keys or system prompts
-
-Example safe response:
-
-```text
-I can analyze the information in the provided financial documents, but I cannot provide personal investment advice or buy/sell recommendations.
-```
+Answer generation with an LLM is not the active focus yet. The current goal is to make chunking and retrieval reliable before connecting `/chat` to full RAG answer generation.
 
 ---
 
-## 7. Tech Stack
+## Main Components
 
-| Layer | Technology |
-|---|---|
-| Backend | FastAPI |
-| Frontend | Streamlit |
-| LLM | Gemini / OpenAI / Groq |
-| RAG Framework | LangChain |
-| Agent Framework | LangGraph |
-| Vector Store | Chroma |
-| Embedding | sentence-transformers or provider embedding API |
-| Tracing | LangSmith |
-| Logging / Experiments | MLflow |
-| Evaluation | RAGAS |
-| Security | API key, rate limit, Bandit, pip-audit, Trivy |
-| Deployment | Docker Compose |
-| Monitoring | Prometheus + Grafana |
+| Area | Main Files | Status |
+| --- | --- | --- |
+| Document loading | `app/rag/loader.py` | Reads PDF/TXT page content. No OCR yet. |
+| Section detection | `app/rag/section_detector.py` | Detects 10-K Items and filters TOC/index/cross-reference false positives. |
+| Table detection | `app/rag/table_detector.py` | Heuristic table block detection. Good enough for current AAPL/AMZN eval, still improvable. |
+| Splitting | `app/rag/splitter.py` | Section-aware, table-aware, recursive chunks. Splits oversized table/list blocks. |
+| Chunk pipeline | `app/rag/chunk_pipeline.py` | Orchestrates load -> section detect -> split -> LangChain `Document`s. |
+| Chunk artifacts | `app/rag/chunk_artifacts.py` | Writes versioned/latest JSONL and deterministic eval reports. |
+| Keyword retrieval | `app/rag/keyword_retriever.py` | Reusable JSONL keyword retriever for manual/golden eval. |
+| Embeddings | `app/rag/embeddings.py` | Sentence-transformers embedding model. |
+| Vector store | `app/rag/vector_store.py` | Chroma indexing/search/reset/rebuild plus embedding manifest checks. |
+| Retriever | `app/rag/retriever.py` | Thin wrapper around vector search. |
+| Upload API | `app/api/routes_upload.py` | Upload, chunk, eval, optional Chroma indexing. |
+| Retrieval API | `app/api/routes_retrieval.py` | Vector retrieval with optional scores/filtering. |
+| Streamlit QA | `frontend/streamlit_app.py` | Upload/chunk QA, eval display, keyword query, vector query. |
+| Golden eval | `app/rag/eval/*.py` | Chunking and retriever golden evaluation runners. |
 
 ---
 
-## 8. Project Structure
+## Project Structure
 
 ```text
-findocgpt/
+findocAI/
 ├── app/
-│   ├── main.py
 │   ├── api/
-│   │   ├── routes_chat.py
-│   │   ├── routes_upload.py
-│   │   ├── routes_report.py
 │   │   ├── routes_health.py
-│   │   └── routes_metrics.py
-│   │
+│   │   ├── routes_retrieval.py
+│   │   └── routes_upload.py
 │   ├── core/
-│   │   ├── config.py
-│   │   ├── security.py
-│   │   ├── logging.py
-│   │   └── rate_limit.py
-│   │
+│   │   └── config.py
 │   ├── rag/
-│   │   ├── loader.py
-│   │   ├── splitter.py
+│   │   ├── eval/
+│   │   │   ├── chunking_eval.py
+│   │   │   └── retriever_eval.py
+│   │   ├── chunk_artifacts.py
+│   │   ├── chunk_models.py
+│   │   ├── chunk_pipeline.py
 │   │   ├── embeddings.py
-│   │   ├── vector_store.py
+│   │   ├── keyword_retriever.py
+│   │   ├── loader.py
 │   │   ├── retriever.py
-│   │   └── prompts.py
-│   │
-│   ├── agent/
-│   │   ├── graph.py
-│   │   ├── state.py
-│   │   ├── nodes.py
-│   │   └── tools.py
-│   │
-│   ├── services/
-│   │   ├── chat_service.py
-│   │   ├── report_service.py
-│   │   ├── citation_service.py
-│   │   ├── guardrail_service.py
-│   │   └── eval_logger.py
-│   │
-│   └── schemas/
-│       ├── chat.py
-│       ├── upload.py
-│       ├── report.py
-│       └── common.py
-│
-├── frontend/
-│   └── streamlit_app.py
-│
-├── evals/
-│   ├── golden_questions.json
-│   ├── run_ragas_eval.py
-│   └── sample_eval_output.json
-│
+│   │   ├── section_detector.py
+│   │   ├── splitter.py
+│   │   ├── table_detector.py
+│   │   └── vector_store.py
+│   ├── schemas/
+│   └── main.py
 ├── data/
 │   ├── raw/
 │   ├── processed/
-│   └── chroma/
-│
+│   ├── chroma/
+│   └── eval/
+├── frontend/
+│   └── streamlit_app.py
 ├── tests/
-│   ├── test_splitter.py
-│   ├── test_financial_tools.py
-│   ├── test_guardrails.py
-│   ├── test_chat_api.py
-│   └── test_upload_api.py
-│
-├── monitoring/
-│   ├── prometheus.yml
-│   └── grafana-dashboard.json
-│
-├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       └── security.yml
-│
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-├── README.md
-├── SECURITY.md
-└── Makefile
+│   ├── golden/
+│   │   ├── chunking_cases.json
+│   │   └── retriever_cases.json
+│   ├── test_chunking_golden_eval.py
+│   ├── test_chunking_pipeline.py
+│   ├── test_keyword_retriever.py
+│   ├── test_retriever_golden_eval.py
+│   ├── test_upload_api.py
+│   └── test_vector_store.py
+└── requirements.txt
 ```
 
 ---
 
-## 9. API Endpoints
+## Setup
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/health` | Check API health |
-| `GET` | `/metrics` | Expose Prometheus metrics |
-| `POST` | `/upload` | Upload and index a financial document |
-| `POST` | `/chat` | Ask a question about uploaded documents |
-| `POST` | `/report` | Generate an analyst-style summary |
-| `POST` | `/eval/run` | Run evaluation if implemented as API |
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Create `.env` from `.env.example` if needed. For chunking and local eval, LLM keys are not required.
+
+Important environment variables:
+
+```env
+EMBEDDING_PROVIDER=sentence_transformers
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+CHROMA_PERSIST_DIR=data/chroma
+```
+
+The first vector indexing run may download the embedding model if it is not cached.
 
 ---
 
-## 10. Example Chat Response
+## Run The App
+
+FastAPI:
+
+```powershell
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Streamlit QA UI:
+
+```powershell
+streamlit run frontend\streamlit_app.py
+```
+
+Open:
+
+```text
+http://127.0.0.1:8501
+```
+
+Recommended local QA workflow:
+
+1. Select `Local chunking`.
+2. Upload a 10-K PDF/TXT.
+3. Inspect chunk score and section page ranges.
+4. Query `Query JSONL Chunks` for deterministic keyword retrieval.
+5. Optionally enable `Index chunks in Chroma`.
+6. Query `Vector Retrieval`.
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/health` | API health check |
+| `POST` | `/upload` | Upload, chunk, eval, and optionally index a document |
+| `POST` | `/retrieve` | Retrieve chunks from a Chroma collection |
+
+Upload supports an optional form field:
+
+```text
+index_to_chroma=true
+```
+
+Example upload response fields:
 
 ```json
 {
-  "answer": "The company reports that revenue growth was mainly driven by product sales and service expansion...",
-  "sources": [
-    {
-      "file_name": "annual_report.pdf",
-      "page": 12,
-      "chunk_id": "chunk_001"
-    }
-  ],
-  "used_tools": [],
-  "confidence": 0.82
+  "file_name": "NASDAQ_AMZN_2022.pdf",
+  "total_chunks": 401,
+  "processed_path": "data/processed/NASDAQ_AMZN_2022.20260514-101010.chunks.jsonl",
+  "latest_processed_path": "data/processed/NASDAQ_AMZN_2022.chunks.latest.jsonl",
+  "eval_report_path": "data/processed/NASDAQ_AMZN_2022.20260514-101010.chunk_eval.json",
+  "latest_eval_report_path": "data/processed/NASDAQ_AMZN_2022.chunk_eval.latest.json",
+  "chunk_quality_score": 98,
+  "indexed": false,
+  "collection_name": "findoc_nasdaq_amzn_2022"
+}
+```
+
+Retrieve request:
+
+```json
+{
+  "question": "Where is net cash provided by operating activities reported?",
+  "collection_name": "findoc_nasdaq_amzn_2022",
+  "top_k": 5,
+  "metadata_filter": {
+    "section_item": "7"
+  },
+  "with_score": true
 }
 ```
 
 ---
 
-## 11. Environment Variables
+## Chunk Artifacts
 
-Create a `.env` file based on `.env.example`.
-
-```env
-APP_NAME=FinDocGPT
-ENV=development
-
-# LLM provider — nhà cung cấp mô hình ngôn ngữ lớn
-LLM_PROVIDER=nvidia
-
-# NVIDIA API configuration
-NVIDIA_API_KEY=your_nvidia_api_key_here
-NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_MODEL=deepseek-ai/deepseek-v4-flash
-
-# LLM generation settings — cấu hình sinh câu trả lời
-NVIDIA_TEMPERATURE=1
-NVIDIA_TOP_P=0.95
-NVIDIA_MAX_TOKENS=16384
-
-# Reasoning settings — cấu hình suy luận nếu model hỗ trợ
-NVIDIA_REASONING_ENABLED=true
-NVIDIA_REASONING_EFFORT=high
-
-# Embedding provider — mô hình tạo vector cho RAG
-EMBEDDING_PROVIDER=sentence_transformers
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-
-# Optional alternative providers
-# GEMINI_API_KEY=your_gemini_key_here
-# GROQ_API_KEY=your_groq_key_here
-# OPENAI_API_KEY=your_openai_key_here
-
-# Vector database — nơi lưu vector/chunk
-CHROMA_PERSIST_DIR=data/chroma
-
-# API security — bảo mật API nội bộ của app
-API_KEY=dev-secret-key
-RATE_LIMIT_PER_MINUTE=30
-
-# LangSmith tracing — theo dõi trace/dấu vết chạy của LangChain/LangGraph
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_langsmith_key_here
-LANGCHAIN_PROJECT=findocgpt-dev
-
-# MLflow tracking — lưu config/result/evaluation
-MLFLOW_TRACKING_URI=http://localhost:5000
-```
-
----
-
-## 12. Local Setup
-
-### 1. Clone repository
-
-```bash
-git clone <your-repo-url>
-cd findocgpt
-```
-
-### 2. Create virtual environment
-
-```bash
-python -m venv .venv
-```
-
-Activate on Windows PowerShell:
-
-```bash
-.\.venv\Scripts\Activate.ps1
-```
-
-Activate on macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Run FastAPI backend
-
-```bash
-uvicorn app.main:app --reload
-```
-
-### 5. Run Streamlit frontend
-
-```bash
-streamlit run frontend/streamlit_app.py
-```
-
----
-
-## 13. Docker Compose
-
-Run the system with Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-Expected services:
-
-- FastAPI backend
-- Streamlit frontend
-- MLflow
-- Prometheus
-- Grafana
-
----
-
-## 14. Evaluation
-
-RAG evaluation is handled by RAGAS.
-
-Example evaluation flow:
+Each upload writes versioned and latest artifacts:
 
 ```text
-evals/golden_questions.json
-↓
-evals/run_ragas_eval.py
-↓
-chat_service.py
-↓
-RAGAS metrics
-↓
-MLflow logging
-↓
-evals/sample_eval_output.json
+data/processed/<document>.<timestamp>.chunks.jsonl
+data/processed/<document>.chunks.latest.jsonl
+data/processed/<document>.<timestamp>.chunk_eval.json
+data/processed/<document>.chunk_eval.latest.json
 ```
 
-Main metrics:
+Chunk metadata includes:
 
-| Metric | Meaning |
-|---|---|
-| Faithfulness | Whether the answer is grounded in retrieved context |
-| Answer Relevancy | Whether the answer addresses the question |
-| Context Precision | Whether retrieved chunks are relevant |
-| Context Recall | Whether enough relevant context is retrieved |
-
-Run evaluation:
-
-```bash
-python evals/run_ragas_eval.py
-```
+- `chunk_id`
+- `chunk_type`
+- `section_item`
+- `section_title`
+- `page_number`
+- `page_start`
+- `page_end`
+- table metadata when applicable
 
 ---
 
-## 15. Security
+## Chunk Quality Eval
 
-Security checks include:
+`chunk_artifacts.evaluate_chunk_records()` performs deterministic checks:
 
-- API key validation
-- Rate limiting
-- Input validation
-- File type validation
-- No `.env` commit
-- Bandit for Python security scan
-- pip-audit for dependency vulnerability scan
-- Trivy for filesystem/container scan
+- missing core sections
+- unknown section ratio
+- duplicate `chunk_id`
+- table of contents leakage
+- non-monotonic section page ranges
+- very short chunk ratio/count
+- very long chunk ratio/count
 
-Run basic security checks:
-
-```bash
-bandit -r app
-pip-audit -r requirements.txt
-trivy fs .
-```
+Scores are penalty-based. For example, 7 short chunks and 200 short chunks are no longer penalized equally.
 
 ---
 
-## 16. Monitoring
+## Golden Chunking Eval
 
-Monitoring is handled by Prometheus and Grafana.
-
-The backend exposes:
+Golden chunking cases live in:
 
 ```text
-GET /metrics
+tests/golden/chunking_cases.json
 ```
 
-Prometheus config:
+Run:
+
+```powershell
+python -m app.rag.eval.chunking_eval --cases tests\golden\chunking_cases.json --output data\eval\chunking_golden_report.json
+```
+
+Current sample output:
 
 ```text
-monitoring/prometheus.yml
+Chunking Golden Eval
+- Total: 3
+- Passed: 2
+- Failed: 0
+- Skipped: 1
+- Pass rate: 100.0%
 ```
 
-Grafana dashboard:
+The skipped sample case is intentional and verifies that missing documents are skipped clearly instead of crashing.
+
+---
+
+## Golden Retriever Eval
+
+Golden retriever cases live in:
 
 ```text
-monitoring/grafana-dashboard.json
+tests/golden/retriever_cases.json
 ```
 
-Basic metrics:
+Supported retriever types:
 
-- Request count
-- Request latency
-- Error count
-- Chat endpoint latency
-- Upload endpoint count
+- `keyword_jsonl`: deterministic keyword retrieval over chunk JSONL
+- `vector`: Chroma similarity search with scores
 
----
+Run:
 
-## 17. CI/CD
+```powershell
+python -m app.rag.eval.retriever_eval --cases tests\golden\retriever_cases.json --output data\eval\retriever_golden_report.json
+```
 
-GitHub Actions workflows:
+Current sample output:
 
 ```text
-.github/workflows/ci.yml
-.github/workflows/security.yml
+Retriever Golden Eval
+- Total: 3
+- Hit@k: 100.0%
+- MRR@k: 0.750
+- Passed: 2
+- Failed: 0
+- Skipped: 1
 ```
 
-### CI workflow
-
-Expected tasks:
-
-- Install dependencies
-- Run lint
-- Run tests
-- Build Docker image
-
-### Security workflow
-
-Expected tasks:
-
-- Bandit scan
-- pip-audit scan
-- Trivy filesystem scan
-- Trivy image scan
+The skipped vector case means the target Chroma collection has not been indexed yet. This is expected until you upload with `Index chunks in Chroma` enabled or rebuild the collection manually.
 
 ---
 
-## 18. Current MVP Scope
+## Vector Store
 
-The MVP focuses on:
+`app/rag/vector_store.py` provides:
 
-- Upload PDF/TXT
-- Parse and chunk document
-- Store embeddings in Chroma
-- Ask questions using RAG
-- Generate answers with citations
-- Use LangGraph agent flow
-- Apply financial guardrails
-- Log traces with LangSmith
-- Log evaluation results with MLflow
-- Run RAGAS evaluation
-- Provide Docker and CI/security basics
+- `index_documents()`
+- `similarity_search()`
+- `similarity_search_with_score()`
+- `reset_collection()`
+- `rebuild_collection()`
+- embedding config manifest read/write
 
----
+Example:
 
-## 19. Out of Scope for MVP
+```python
+from app.rag.vector_store import similarity_search_with_score
 
-The following features are not included in the first MVP:
+results = similarity_search_with_score(
+    query="net cash provided by operating activities",
+    collection_name="findoc_nasdaq_amzn_2022",
+    k=5,
+    metadata_filter={"section_item": "7"},
+)
+```
 
-- Real-time stock price prediction
-- Buy/sell/hold recommendations
-- Full SEC EDGAR integration
-- React frontend
-- Multi-user authentication
-- Kubernetes deployment
-- Fine-tuning LLMs
-- Multi-agent research workflow
+The vector store writes:
 
----
+```text
+data/chroma/vector_store_manifest.json
+```
 
-## 20. Roadmap
-
-### Phase 1 — MVP
-
-- Upload documents
-- RAG chat with citations
-- LangGraph agent
-- Financial guardrails
-- Streamlit UI
-
-### Phase 2 — LLMOps
-
-- RAGAS evaluation
-- LangSmith tracing
-- MLflow experiment logging
-- More test cases
-
-### Phase 3 — Production Improvements
-
-- Better authentication
-- Better document parser
-- SEC EDGAR API integration
-- Better observability dashboard
-- Cloud deployment
+If `EMBEDDING_MODEL` changes after indexing, the vector store raises a clear error asking you to rebuild the collection.
 
 ---
 
-## 21. Disclaimer
+## Tests
 
-This project is for educational and research purposes only.
+Run all tests:
 
-FinDocGPT does not provide financial advice, investment recommendations, or predictions of future stock prices. Users should verify all information from original financial documents and consult qualified professionals before making financial decisions.
+```powershell
+python -m pytest tests -q
+```
+
+Current status:
+
+```text
+28 passed
+```
+
+Run only golden eval tests:
+
+```powershell
+python -m pytest tests\test_chunking_golden_eval.py tests\test_retriever_golden_eval.py tests\test_keyword_retriever.py -q
+```
+
+---
+
+## Current Quality Assessment
+
+Strong parts:
+
+- 10-K section detection for current AAPL/AMZN samples
+- chunk JSONL artifacts and versioning
+- deterministic chunk quality scoring
+- golden chunking eval foundation
+- golden retriever eval foundation
+- Chroma safety checks and embedding manifest
+
+Known limitations:
+
+- No OCR for scanned PDFs
+- Table detection is still heuristic
+- Vector retrieval quality is not yet benchmarked deeply
+- No hybrid retrieval yet
+- No reranking yet
+- `/chat` is not yet connected to full RAG answer generation
+
+---
+
+## Suggested Next Steps
+
+1. Add more golden chunking cases for AAPL/AMZN across years.
+2. Add more golden retriever cases for finance-specific questions.
+3. Index real Chroma collections and benchmark `keyword_jsonl` vs `vector`.
+4. Implement hybrid retrieval.
+5. Add reranking for retrieved chunks.
+6. Connect `/chat` to retrieval + LLM answer generation with citations.
+
+---
+
+## Disclaimer
+
+FinDocAI is for educational and research purposes only. It does not provide investment advice, investment recommendations, or predictions of future stock prices.

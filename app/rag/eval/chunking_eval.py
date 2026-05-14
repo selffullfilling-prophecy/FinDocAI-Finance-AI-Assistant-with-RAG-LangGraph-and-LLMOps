@@ -17,8 +17,8 @@ def run_chunking_golden_eval(cases_path: str | Path) -> dict[str, Any]:
     return _build_report(case_results)
 
 
-def evaluate_chunking_case(case: dict[str, Any]) -> dict[str, Any]:
-    case_id = case.get("case_id", "unknown_case")
+def evaluate_chunking_case(case: dict[str, Any]) -> dict[str, Any]: # xác định case này dùng data chunking jsonl 
+    case_id = case.get("case_id", "unknown_case")    # hay là document thật rồi chạy chunking pipeline 
     document_path = case.get("document_path")
     chunks_path = case.get("chunks_path")
 
