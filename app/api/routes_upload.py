@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from langchain_core.documents import Document
 
 from app.core.config import get_settings
@@ -15,6 +15,7 @@ from app.rag.chunk_artifacts import (
 )
 from app.rag.chunk_pipeline import chunk_10k_file
 from app.rag.loader import SUPPORTED_EXTENSIONS
+from app.rag.vector_store import collection_name_from_file, index_documents
 from app.schemas.upload import UploadResponse
 
 
@@ -22,7 +23,10 @@ router = APIRouter(tags=["Upload"])
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
+async def upload_document(
+    file: UploadFile = File(...),
+    index_to_chroma: bool = Form(False),
+) -> UploadResponse:
     """Upload a 10-K PDF/TXT file, save it, and run the chunking pipeline.
 
     Current scope:
@@ -69,6 +73,18 @@ async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
         )
 
     artifacts = _write_processed_chunks(processed_dir, raw_path, chunks)
+    collection_name = collection_name_from_file(original_name)
+    indexed = False
+    vector_count: int | None = None
+    indexing_error: str | None = None
+
+    if index_to_chroma:
+        try:
+            index_result = index_documents(chunks, collection_name)
+            indexed = True
+            vector_count = index_result["vector_count"]
+        except Exception as exc:
+            indexing_error = str(exc)
 
     return UploadResponse(
         file_name=original_name,
@@ -80,6 +96,10 @@ async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
         eval_report_path=str(artifacts["versioned_eval"]),
         latest_eval_report_path=str(artifacts["latest_eval"]),
         chunk_quality_score=artifacts["eval_report"]["score"],
+        indexed=indexed,
+        collection_name=collection_name,
+        vector_count=vector_count,
+        indexing_error=indexing_error,
     )
 
 

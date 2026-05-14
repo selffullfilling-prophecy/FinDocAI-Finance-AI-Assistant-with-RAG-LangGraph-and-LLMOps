@@ -75,15 +75,22 @@ def evaluate_chunk_records(chunks: list[dict[str, Any]]) -> dict[str, Any]:
                 "severity": "high",
                 "code": "missing_core_sections",
                 "message": f"Missing common 10-K sections: {', '.join(missing_core)}.",
+                "count": len(missing_core),
+                "penalty": 20 + (10 * len(missing_core)),
             }
         )
 
     if "UNKNOWN" in section_counts:
+        unknown_count = section_counts["UNKNOWN"]
+        unknown_ratio = _ratio(unknown_count, len(chunks))
         issues.append(
             {
-                "severity": "medium",
+                "severity": _severity_from_ratio(unknown_ratio, medium_at=0.03, high_at=0.10),
                 "code": "unknown_section_chunks",
-                "message": f"{section_counts['UNKNOWN']} chunks have UNKNOWN section metadata.",
+                "message": f"{unknown_count} chunks ({unknown_ratio:.1%}) have UNKNOWN section metadata.",
+                "count": unknown_count,
+                "ratio": unknown_ratio,
+                "penalty": _scaled_penalty(unknown_count, unknown_ratio, base=8, per_item=1.0, ratio_weight=80, cap=35),
             }
         )
 
@@ -93,6 +100,8 @@ def evaluate_chunk_records(chunks: list[dict[str, Any]]) -> dict[str, Any]:
                 "severity": "high",
                 "code": "duplicate_chunk_ids",
                 "message": f"Duplicate chunk IDs: {', '.join(duplicate_chunk_ids[:10])}.",
+                "count": len(duplicate_chunk_ids),
+                "penalty": min(40, 15 + len(duplicate_chunk_ids)),
             }
         )
 
@@ -104,6 +113,8 @@ def evaluate_chunk_records(chunks: list[dict[str, Any]]) -> dict[str, Any]:
                 "code": "toc_title_leakage",
                 "message": "Some section titles look like Table of Contents rows with page numbers.",
                 "examples": suspicious_titles[:10],
+                "count": len(suspicious_titles),
+                "penalty": min(40, 20 + (5 * len(suspicious_titles))),
             }
         )
 
@@ -115,26 +126,36 @@ def evaluate_chunk_records(chunks: list[dict[str, Any]]) -> dict[str, Any]:
                 "code": "non_monotonic_section_pages",
                 "message": "Some section page ranges move backwards.",
                 "examples": non_monotonic,
+                "count": len(non_monotonic),
+                "penalty": min(25, 8 + (4 * len(non_monotonic))),
             }
         )
 
     very_short = sum(1 for length in lengths if length < 80)
     if very_short:
+        short_ratio = _ratio(very_short, len(chunks))
         issues.append(
             {
-                "severity": "low",
+                "severity": _severity_from_ratio(short_ratio, medium_at=0.05, high_at=0.15),
                 "code": "very_short_chunks",
-                "message": f"{very_short} chunks are shorter than 80 characters.",
+                "message": f"{very_short} chunks ({short_ratio:.1%}) are shorter than 80 characters.",
+                "count": very_short,
+                "ratio": short_ratio,
+                "penalty": _scaled_penalty(very_short, short_ratio, base=1, per_item=0.10, ratio_weight=35, cap=45),
             }
         )
 
     very_long = sum(1 for length in lengths if length > 2_500)
     if very_long:
+        long_ratio = _ratio(very_long, len(chunks))
         issues.append(
             {
-                "severity": "medium",
+                "severity": _severity_from_ratio(long_ratio, medium_at=0.01, high_at=0.05),
                 "code": "very_long_chunks",
-                "message": f"{very_long} chunks are longer than 2,500 characters.",
+                "message": f"{very_long} chunks ({long_ratio:.1%}) are longer than 2,500 characters.",
+                "count": very_long,
+                "ratio": long_ratio,
+                "penalty": _scaled_penalty(very_long, long_ratio, base=3, per_item=0.75, ratio_weight=80, cap=30),
             }
         )
 
@@ -145,11 +166,14 @@ def evaluate_chunk_records(chunks: list[dict[str, Any]]) -> dict[str, Any]:
                 "severity": "medium",
                 "code": "toc_content_leakage",
                 "message": f"{toc_markers} chunks contain INDEX/Table of Contents markers.",
+                "count": toc_markers,
+                "penalty": min(30, 8 + (4 * toc_markers)),
             }
         )
 
     return {
         "score": _score_from_issues(issues),
+        "total_penalty": sum(issue.get("penalty", 0) for issue in issues),
         "total_chunks": len(chunks),
         "chunk_types": dict(type_counts),
         "section_counts": dict(section_counts),
@@ -232,9 +256,32 @@ def _count_toc_marker_chunks(chunks: list[dict[str, Any]]) -> int:
     return count
 
 
+def _ratio(count: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return count / total
+
+
+def _severity_from_ratio(ratio: float, medium_at: float, high_at: float) -> str:
+    if ratio >= high_at:
+        return "high"
+    if ratio >= medium_at:
+        return "medium"
+    return "low"
+
+
+def _scaled_penalty(
+    count: int,
+    ratio: float,
+    base: float,
+    per_item: float,
+    ratio_weight: float,
+    cap: float,
+) -> int:
+    penalty = base + (count * per_item) + (ratio * ratio_weight)
+    return min(int(round(penalty)), int(cap))
+
+
 def _score_from_issues(issues: list[dict[str, Any]]) -> int:
-    score = 100
-    penalties = {"high": 25, "medium": 12, "low": 5}
-    for issue in issues:
-        score -= penalties.get(issue.get("severity"), 5)
-    return max(score, 0)
+    penalty = sum(int(issue.get("penalty", 0)) for issue in issues)
+    return max(100 - penalty, 0)

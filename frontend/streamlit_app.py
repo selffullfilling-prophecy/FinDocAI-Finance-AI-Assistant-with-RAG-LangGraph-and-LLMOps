@@ -19,6 +19,7 @@ from app.rag.chunk_artifacts import (
 )
 from app.rag.chunk_pipeline import chunk_10k_file
 from app.rag.loader import SUPPORTED_EXTENSIONS
+from app.rag.vector_store import collection_name_from_file, index_documents, similarity_search
 
 
 DEFAULT_API_URL = os.getenv("FINDOC_API_URL", "http://127.0.0.1:8000")
@@ -59,6 +60,8 @@ def reset_upload_state(clear_file: bool = True) -> None:
         "inspect_section_filter",
         "inspect_type_filter",
         "inspect_search_query",
+        "vector_retrieval_query",
+        "vector_top_k",
     ]
     for key in keys_to_clear:
         st.session_state.pop(key, None)
@@ -89,7 +92,7 @@ def check_health(base_url: str) -> tuple[bool, str]:
         )
 
 
-def upload_to_api(base_url: str, uploaded_file: Any) -> dict[str, Any]:
+def upload_to_api(base_url: str, uploaded_file: Any, index_to_chroma: bool) -> dict[str, Any]:
     files = {
         "file": (
             uploaded_file.name,
@@ -97,13 +100,18 @@ def upload_to_api(base_url: str, uploaded_file: Any) -> dict[str, Any]:
             uploaded_file.type or "application/octet-stream",
         )
     }
-    response = requests.post(f"{base_url}/upload", files=files, timeout=180)
+    response = requests.post(
+        f"{base_url}/upload",
+        files=files,
+        data={"index_to_chroma": str(index_to_chroma).lower()},
+        timeout=300,
+    )
     if not response.ok:
         raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
     return response.json()
 
 
-def chunk_locally(uploaded_file: Any) -> dict[str, Any]:
+def chunk_locally(uploaded_file: Any, index_to_chroma: bool = False) -> dict[str, Any]:
     original_name = Path(uploaded_file.name).name
     extension = Path(original_name).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
@@ -127,6 +135,18 @@ def chunk_locally(uploaded_file: Any) -> dict[str, Any]:
     eval_report = evaluate_chunk_records(load_chunks_jsonl(artifacts["versioned_chunks"]))
     write_eval_report(artifacts["versioned_eval"], eval_report)
     write_eval_report(artifacts["latest_eval"], eval_report)
+    collection_name = collection_name_from_file(original_name)
+    indexed = False
+    vector_count: int | None = None
+    indexing_error: str | None = None
+
+    if index_to_chroma:
+        try:
+            index_result = index_documents(chunks, collection_name)
+            indexed = True
+            vector_count = index_result["vector_count"]
+        except Exception as exc:
+            indexing_error = str(exc)
 
     return {
         "file_name": original_name,
@@ -138,6 +158,10 @@ def chunk_locally(uploaded_file: Any) -> dict[str, Any]:
         "eval_report_path": str(artifacts["versioned_eval"]),
         "latest_eval_report_path": str(artifacts["latest_eval"]),
         "chunk_quality_score": eval_report["score"],
+        "indexed": indexed,
+        "collection_name": collection_name,
+        "vector_count": vector_count,
+        "indexing_error": indexing_error,
     }
 
 
@@ -316,7 +340,18 @@ def render_eval_report(report: dict[str, Any] | None) -> None:
         st.caption("No deterministic chunking issues detected.")
     else:
         for issue in issues:
-            st.markdown(f"- `{issue.get('severity')}` `{issue.get('code')}`: {issue.get('message')}")
+            penalty = issue.get("penalty", 0)
+            count = issue.get("count")
+            ratio = issue.get("ratio")
+            metric_bits = [f"penalty={penalty}"]
+            if count is not None:
+                metric_bits.append(f"count={count}")
+            if ratio is not None:
+                metric_bits.append(f"ratio={ratio:.1%}")
+            st.markdown(
+                f"- `{issue.get('severity')}` `{issue.get('code')}` "
+                f"({', '.join(metric_bits)}): {issue.get('message')}"
+            )
             if issue.get("examples"):
                 st.json(issue["examples"], expanded=False)
 
@@ -417,6 +452,11 @@ with st.sidebar:
     st.caption(f"Upload slot #{st.session_state['upload_widget_version']}")
     uploader_key = f"tenk_file_uploader_{st.session_state['upload_widget_version']}"
     uploaded_file = st.file_uploader("10-K PDF/TXT", type=["pdf", "txt"], key=uploader_key)
+    index_to_chroma = st.checkbox(
+        "Index chunks in Chroma",
+        value=False,
+        help="Creates embeddings and stores chunks in Chroma. First run can be slow if the embedding model is not cached.",
+    )
     current_signature = uploaded_file_signature(uploaded_file)
 
     active_signature = st.session_state.get("active_upload_signature")
@@ -440,9 +480,9 @@ if upload_clicked and uploaded_file is not None:
     with st.spinner("Uploading and chunking document..."):
         try:
             if mode == "API /upload":
-                response_payload = upload_to_api(api_url(), uploaded_file)
+                response_payload = upload_to_api(api_url(), uploaded_file, index_to_chroma)
             else:
-                response_payload = chunk_locally(uploaded_file)
+                response_payload = chunk_locally(uploaded_file, index_to_chroma)
             processed_path = resolve_processed_path(response_payload)
             chunks = load_chunks(processed_path)
             eval_report_path = response_payload.get("eval_report_path")
@@ -475,6 +515,15 @@ result_cols[0].write(upload_response.get("file_name") if upload_response else ""
 result_cols[1].write(f"{summary['total']} chunks")
 result_cols[2].code(st.session_state.get("processed_path", ""), language="text")
 
+if upload_response:
+    index_cols = st.columns([2, 1, 3])
+    index_cols[0].write(f"Collection: `{upload_response.get('collection_name')}`")
+    index_cols[1].write(f"Indexed: `{upload_response.get('indexed')}`")
+    if upload_response.get("indexing_error"):
+        index_cols[2].warning(upload_response["indexing_error"])
+    elif upload_response.get("indexed"):
+        index_cols[2].success(f"{upload_response.get('vector_count')} vectors stored in Chroma")
+
 render_metrics(summary)
 
 st.subheader("Chunk Quality Eval")
@@ -490,7 +539,7 @@ with right:
     st.bar_chart(dict(summary["chunk_types"]))
 
 st.subheader("Manual Chunk QA")
-retrieval_tab, inspect_tab = st.tabs(["Query JSONL Chunks", "Inspect Chunks"])
+retrieval_tab, vector_tab, inspect_tab = st.tabs(["Query JSONL Chunks", "Vector Retrieval", "Inspect Chunks"])
 
 sections = sorted(summary["section_counts"].keys())
 types = sorted(summary["chunk_types"].keys())
@@ -527,6 +576,38 @@ with retrieval_tab:
             render_retrieval_result(result, index)
     else:
         st.info("Enter a query or choose an example to test whether the chunk JSONL contains the expected context.")
+
+with vector_tab:
+    st.caption("This queries Chroma for the current collection. It requires indexing to be enabled during upload.")
+    collection_name = upload_response.get("collection_name") if upload_response else None
+    vector_query_cols = st.columns([5, 1])
+    vector_query = vector_query_cols[0].text_input(
+        "Vector retrieval query",
+        placeholder="Example: revenue growth drivers",
+        key="vector_retrieval_query",
+    )
+    vector_top_k = vector_query_cols[1].number_input(
+        "Vector top k",
+        min_value=1,
+        max_value=20,
+        value=5,
+        step=1,
+        key="vector_top_k",
+    )
+    if not upload_response or not upload_response.get("indexed"):
+        st.info("Upload with `Index chunks in Chroma` enabled to use vector retrieval.")
+    elif vector_query.strip():
+        try:
+            vector_docs = similarity_search(vector_query, collection_name, k=int(vector_top_k))
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.caption(f"Retrieved {len(vector_docs)} chunks from `{collection_name}`")
+            for index, document in enumerate(vector_docs):
+                render_chunk(
+                    {"page_content": document.page_content, "metadata": document.metadata},
+                    index,
+                )
 
 with inspect_tab:
     filters = st.columns([2, 2, 3])

@@ -32,7 +32,13 @@ def test_upload_document_chunks_txt_and_writes_processed_jsonl(tmp_path, monkeyp
     body = response.json()
     assert body["file_name"] == "sample-10k.txt"
     assert body["total_chunks"] > 0
+    assert body["indexed"] is False
+    assert body["collection_name"] == "findoc_sample-10k"
 
-    processed_path = tmp_path / "processed" / "sample-10k.chunks.jsonl"
+    processed_path = Path(body["processed_path"])
+    latest_processed_path = Path(body["latest_processed_path"])
+    eval_report_path = Path(body["eval_report_path"])
     assert processed_path.exists()
+    assert latest_processed_path.exists()
+    assert eval_report_path.exists()
     assert '"chunk_id"' in processed_path.read_text(encoding="utf-8")
