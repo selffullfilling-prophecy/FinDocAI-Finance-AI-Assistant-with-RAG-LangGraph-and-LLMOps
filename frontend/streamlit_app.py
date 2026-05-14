@@ -34,7 +34,9 @@ EVAL_REPORTS = {
     "Chunking": Path("data/eval/chunking_golden_report.json"),
     "Retriever": Path("data/eval/retriever_golden_report.json"),
     "Answer": Path("data/eval/answer_golden_report.json"),
+    "RAGAS": Path("data/eval/ragas_report.json"),
 }
+BENCHMARK_SUMMARY_PATH = Path("data/eval/benchmark_summary.md")
 WAITING_TICK_SECONDS = 0.08
 TYPEWRITER_CHAR_DELAY = 0.006
 TYPEWRITER_WORD_DELAY = 0.025
@@ -738,6 +740,10 @@ def render_golden_evals() -> None:
                 "python -m app.rag.eval.retriever_eval --cases tests/golden/retriever_cases.json --output data/eval/retriever_golden_report.json",
                 '$env:RUN_LLM_EVAL="1"',
                 "python -m app.rag.eval.answer_eval --cases tests/golden/answer_cases.json --output data/eval/answer_golden_report.json",
+                "pip install -r requirements-eval.txt",
+                '$env:RUN_RAGAS_EVAL="1"',
+                "python -m app.rag.eval.ragas_eval --cases tests/golden/ragas_cases.json --output data/eval/ragas_report.json",
+                "python -m app.rag.eval.benchmark_summary --output data/eval/benchmark_summary.md",
             ]
         ),
         language="powershell",
@@ -751,10 +757,16 @@ def render_golden_evals() -> None:
                 continue
             cols = st.columns(4)
             cols[0].metric("Total", report.get("total_cases", 0))
-            cols[1].metric("Passed", report.get("passed_cases", 0))
+            cols[1].metric("Passed/Completed", report.get("passed_cases", report.get("completed_cases", 0)))
             cols[2].metric("Failed", report.get("failed_cases", 0))
             cols[3].metric("Skipped", report.get("skipped_cases", 0))
             st.json(report, expanded=False)
+
+    with st.expander(f"Benchmark Summary: {BENCHMARK_SUMMARY_PATH}", expanded=BENCHMARK_SUMMARY_PATH.exists()):
+        if BENCHMARK_SUMMARY_PATH.exists():
+            st.markdown(BENCHMARK_SUMMARY_PATH.read_text(encoding="utf-8"))
+        else:
+            st.warning("Benchmark summary not found.")
 
 
 def _page_range(value: dict[str, Any]) -> str:

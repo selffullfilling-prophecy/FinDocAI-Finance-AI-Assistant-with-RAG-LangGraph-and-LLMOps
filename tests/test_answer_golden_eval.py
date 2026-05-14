@@ -119,3 +119,65 @@ def test_answer_eval_report_metrics():
     assert report["citation_rate"] == 0.5
     assert report["source_section_hit_rate"] == 1.0
     assert report["term_match_rate"] == 0.75
+
+
+def test_answer_eval_debug_rewrite_expectation_passes():
+    result = answer_eval.evaluate_answer_result(
+        _case(
+            expected_debug_rewrite_strategy="rule_based",
+            expected_rewritten_query_contains="Services gross margin percentage",
+        ),
+        _response()
+        | {
+            "debug": {
+                "rewrite_strategy": "rule_based",
+                "rewritten_query": "What was Apple's Services gross margin percentage in 2023?",
+            }
+        },
+    )
+
+    assert result["status"] == "passed"
+
+
+def test_answer_eval_multi_turn_case_uses_final_response(monkeypatch):
+    monkeypatch.setenv("RUN_LLM_EVAL", "1")
+    monkeypatch.setattr(
+        answer_eval,
+        "get_settings",
+        lambda: type("Settings", (), {"nvidia_api_key": "key"})(),
+    )
+    calls = []
+
+    def fake_answer_question(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return _response("Apple's gross margin percentage was 44.1%. [Source 1]")
+        return _response(
+            "Apple's Services gross margin percentage was 70.8%. [Source 2]",
+            sources=[{"source_number": 2, "chunk_id": "c2", "section_item": "7", "chunk_type": "table"}],
+        ) | {
+            "debug": {
+                "rewrite_strategy": "rule_based",
+                "rewritten_query": "What was Apple's Services gross margin percentage in 2023?",
+            }
+        }
+
+    monkeypatch.setattr(answer_eval, "answer_question", fake_answer_question)
+
+    result = answer_eval.evaluate_answer_case(
+        _case(
+            turns=[
+                {"question": "What was Apple's gross margin percentage in 2023?"},
+                {"question": "How about Services?"},
+            ],
+            expected_final_terms_any=["Services"],
+            expected_final_terms_all=["70.8"],
+            expected_debug_rewrite_strategy="rule_based",
+            expected_rewritten_query_contains="Services gross margin percentage",
+        )
+    )
+
+    assert result["status"] == "passed"
+    assert result["question"] == "How about Services?"
+    assert len(result["turn_outputs"]) == 2
+    assert calls[1]["use_memory_for_retrieval"] is True

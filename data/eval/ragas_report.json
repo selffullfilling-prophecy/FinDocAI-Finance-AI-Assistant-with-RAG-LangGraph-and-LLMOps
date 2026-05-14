@@ -1,0 +1,69 @@
+{
+  "total_cases": 3,
+  "completed_cases": 3,
+  "skipped_cases": 0,
+  "failed_cases": 0,
+  "metrics": {},
+  "case_results": [
+    {
+      "case_id": "aapl_net_sales_income_2023",
+      "status": "completed",
+      "question": "What were Apple's total net sales and net income in 2023?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "issues": [],
+      "answer": "Apple's total net sales in 2023 were $383.3 billion, and net income was $97.0 billion [Source 1].",
+      "answer_status": "answered",
+      "contexts": [
+        "The Company’s total net sales were $383.3 billion and net income was $97.0 billion during 2023. The Company’s total net sales decreased 3% or $11.0 billion during 2023 compared to 2022. The weakness in foreign currencies relative to the U.S. dollaraccounted for more than the entire year-over-year decrease in total net sales, which consisted primarily of lower net sales of Mac and iPhone, partially offset byhigher net sales of Services.",
+        "Net sales disaggregated by significant products and services for 2023, 2022 and 2021 were as follows (in millions): 2023 2022 2021 iPhone $ 200,583 $ 205,489 $ 191,973 Mac 29,357 40,177 35,190 iPad 28,300 29,292 31,862 Wearables, Home and Accessories 39,845 41,241 38,367 Services 85,200 78,129 68,425 Total net sales $ 383,285 $ 394,328 $ 365,817",
+        "iPhone $ 200,583 (2)% $ 205,489 7 % $ 191,973 Mac 29,357 (27)% 40,177 14 % 35,190 iPad 28,300 (3)% 29,292 (8)% 31,862 Wearables, Home and Accessories 39,845 (3)% 41,241 7 % 38,367 Services 85,200 9 % 78,129 14 % 68,425 Total net sales $ 383,285 (3)% $ 394,328 8 % $ 365,817",
+        "Selling, general and administrative expense was relatively flat in 2023 compared to 2022. Apple Inc. | 2023 Form 10-K | 23",
+        "The following table shows the detail of other income/(expense), net for 2023, 2022 and 2021 (in millions): 2023 2022 2021 Interest and dividend income $ 3,750 $ 2,825 $ 2,843 Interest expense (3,933) (2,931) (2,645) Other income/(expense), net (382) (228) 60 Total other income/(expense), net $ (565)$ (334)$ 258 Apple Inc. | 2023 Form 10-K | 39"
+      ],
+      "ground_truth": "Apple's total net sales were $383.3 billion and net income was $97.0 billion in 2023.",
+      "source_count": 1,
+      "retrieved_context_count": 5
+    },
+    {
+      "case_id": "aapl_gross_margin_percentage_2023",
+      "status": "completed",
+      "question": "What was Apple’s gross margin percentage in 2023?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "issues": [],
+      "answer": "Apple’s total gross margin percentage in 2023 was 44.1% [Source 3].",
+      "answer_status": "answered",
+      "contexts": [
+        "Products and Services gross margin and gross margin percentage for 2023, 2022 and 2021 were as follows (dollars in millions): 2023 2022 2021",
+        "Products gross margin decreased during 2023 compared to 2022 due to the weakness in foreign currencies relative to the U.S. dollar and lower Productsvolume, partially offset by cost savings and a different Products mix. Products gross margin percentage increased during 2023 compared to 2022 due to cost savings and a different Products mix, partially offset by the weakness in",
+        "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %",
+        "Selling, general and administrative expense was relatively flat in 2023 compared to 2022. Apple Inc. | 2023 Form 10-K | 23",
+        "Services gross margin increased during 2023 compared to 2022 due primarily to higher Services net sales, partially offset by the weakness in foreign currenciesrelative to the U.S. dollar and higher Services costs. Services gross margin percentage decreased during 2023 compared to 2022 due to higher Services costs and the weakness in foreign currencies relative to the"
+      ],
+      "ground_truth": "Apple's total gross margin percentage was 44.1% in 2023.",
+      "source_count": 1,
+      "retrieved_context_count": 5
+    },
+    {
+      "case_id": "aapl_services_gross_margin_percentage_2023",
+      "status": "completed",
+      "question": "What was Apple’s Services gross margin percentage in 2023?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "issues": [],
+      "answer": "Apple’s Services gross margin percentage in 2023 was 70.8% [Source 2].",
+      "answer_status": "answered",
+      "contexts": [
+        "Products and Services gross margin and gross margin percentage for 2023, 2022 and 2021 were as follows (dollars in millions): 2023 2022 2021",
+        "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %",
+        "Services gross margin increased during 2023 compared to 2022 due primarily to higher Services net sales, partially offset by the weakness in foreign currenciesrelative to the U.S. dollar and higher Services costs. Services gross margin percentage decreased during 2023 compared to 2022 due to higher Services costs and the weakness in foreign currencies relative to the",
+        "Products $ 108,803 $ 114,728 $ 105,126 Services 60,345 56,054 47,710 Total gross margin $ 169,148 $ 170,782 $ 152,836",
+        "Products gross margin decreased during 2023 compared to 2022 due to the weakness in foreign currencies relative to the U.S. dollar and lower Productsvolume, partially offset by cost savings and a different Products mix. Products gross margin percentage increased during 2023 compared to 2022 due to cost savings and a different Products mix, partially offset by the weakness in"
+      ],
+      "ground_truth": "Apple's Services gross margin percentage was 70.8% in 2023.",
+      "source_count": 1,
+      "retrieved_context_count": 5
+    }
+  ],
+  "issues": [
+    "RAGAS evaluation failed: Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+  ]
+}

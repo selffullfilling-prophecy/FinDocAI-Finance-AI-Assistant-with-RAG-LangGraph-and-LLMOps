@@ -1,0 +1,35 @@
+[
+  {
+    "case_id": "aapl_net_sales_income_2023",
+    "question": "What were Apple's total net sales and net income in 2023?",
+    "collection_name": "findoc_nasdaq_aapl_2023",
+    "top_k": 5,
+    "candidate_k": 20,
+    "retrieval_mode": "hybrid",
+    "rerank": true,
+    "ground_truth": "Apple's total net sales were $383.3 billion and net income was $97.0 billion in 2023.",
+    "expected_context_terms": ["383.3", "97.0", "net sales", "net income"]
+  },
+  {
+    "case_id": "aapl_gross_margin_percentage_2023",
+    "question": "What was Apple’s gross margin percentage in 2023?",
+    "collection_name": "findoc_nasdaq_aapl_2023",
+    "top_k": 5,
+    "candidate_k": 20,
+    "retrieval_mode": "hybrid",
+    "rerank": true,
+    "ground_truth": "Apple's total gross margin percentage was 44.1% in 2023.",
+    "expected_context_terms": ["44.1", "gross margin percentage", "2023"]
+  },
+  {
+    "case_id": "aapl_services_gross_margin_percentage_2023",
+    "question": "What was Apple’s Services gross margin percentage in 2023?",
+    "collection_name": "findoc_nasdaq_aapl_2023",
+    "top_k": 5,
+    "candidate_k": 20,
+    "retrieval_mode": "hybrid",
+    "rerank": true,
+    "ground_truth": "Apple's Services gross margin percentage was 70.8% in 2023.",
+    "expected_context_terms": ["70.8", "Services", "gross margin percentage"]
+  }
+]
