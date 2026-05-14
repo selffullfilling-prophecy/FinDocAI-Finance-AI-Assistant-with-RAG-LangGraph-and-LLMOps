@@ -1,0 +1,17 @@
+[
+  {
+    "case_id": "aapl_2023_net_sales_answer",
+    "question": "What drove Apple's net sales?",
+    "collection_name": "findoc_nasdaq_aapl_2023",
+    "top_k": 5,
+    "candidate_k": 20,
+    "retrieval_mode": "hybrid",
+    "rerank": true,
+    "expected_terms_any": ["net sales", "iPhone", "Services", "revenue"],
+    "expected_terms_all": [],
+    "expected_source_sections": ["7"],
+    "require_citation": true,
+    "allow_insufficient_context": false,
+    "forbidden_terms": ["I think", "probably", "not sure"]
+  }
+]

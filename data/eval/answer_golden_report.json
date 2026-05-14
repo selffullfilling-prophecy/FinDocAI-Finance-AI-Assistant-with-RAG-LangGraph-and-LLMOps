@@ -1,0 +1,27 @@
+{
+  "total_cases": 1,
+  "passed_cases": 0,
+  "failed_cases": 0,
+  "skipped_cases": 1,
+  "citation_rate": 0.0,
+  "source_section_hit_rate": 0.0,
+  "term_match_rate": 0.0,
+  "case_results": [
+    {
+      "case_id": "aapl_2023_net_sales_answer",
+      "status": "skipped",
+      "question": "What drove Apple's net sales?",
+      "collection_name": "findoc_nasdaq_aapl_2023",
+      "answer": "",
+      "sources": [],
+      "matched_terms": [],
+      "missing_terms": [],
+      "citation_present": false,
+      "source_section_hit": false,
+      "term_match_rate": 0.0,
+      "issues": [
+        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+      ]
+    }
+  ]
+}

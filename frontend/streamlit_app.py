@@ -2,98 +2,73 @@ from __future__ import annotations
 
 import json
 import os
-import re
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import requests
 import streamlit as st
 
-from app.rag.chunk_artifacts import (
-    build_chunk_artifact_paths,
-    evaluate_chunk_records,
-    load_chunks_jsonl,
-    write_chunks_jsonl,
-    write_eval_report,
-)
-from app.rag.chunk_pipeline import chunk_10k_file
-from app.rag.keyword_retriever import retrieve_from_chunk_records
-from app.rag.loader import SUPPORTED_EXTENSIONS
-from app.rag.vector_store import collection_name_from_file, index_documents, similarity_search
-
 
 DEFAULT_API_URL = os.getenv("FINDOC_API_URL", "http://127.0.0.1:8000")
-RAW_DIR = Path(os.getenv("FINDOC_RAW_DIR", "data/raw"))
-PROCESSED_DIR = Path(os.getenv("FINDOC_PROCESSED_DIR", "data/processed"))
+DEFAULT_CHAT_SETTINGS = {
+    "retrieval_mode": "hybrid",
+    "rerank": True,
+    "stream": True,
+    "use_memory": True,
+    "top_k": 5,
+    "candidate_k": 20,
+    "section_filter": "",
+}
+SUGGESTED_QUESTIONS = [
+    "What were the main drivers of revenue growth?",
+    "What are the key risk factors?",
+    "Summarize the cash flow performance.",
+    "What changed in gross margin?",
+]
+EVAL_REPORTS = {
+    "Chunking": Path("data/eval/chunking_golden_report.json"),
+    "Retriever": Path("data/eval/retriever_golden_report.json"),
+    "Answer": Path("data/eval/answer_golden_report.json"),
+}
 
 
 st.set_page_config(
-    page_title="FinDocGPT Chunking QA",
+    page_title="FinDocAI",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 
+def init_state() -> None:
+    st.session_state.setdefault("api_url", DEFAULT_API_URL)
+    st.session_state.setdefault("active_collection_name", "")
+    st.session_state.setdefault("active_document_name", "")
+    st.session_state.setdefault("document_ready", False)
+    st.session_state.setdefault("chat_messages", [])
+    st.session_state.setdefault("session_id", "default")
+    st.session_state.setdefault("upload_widget_version", 0)
+    st.session_state.setdefault("last_raw_response", None)
+
+
 def api_url() -> str:
     return st.session_state.get("api_url", DEFAULT_API_URL).rstrip("/")
-
-
-def init_upload_state() -> None:
-    st.session_state.setdefault("upload_widget_version", 0)
-    st.session_state.setdefault("active_upload_signature", None)
-    st.session_state.setdefault("clear_uploader_on_next_run", False)
-
-
-def rotate_upload_widget() -> None:
-    st.session_state["upload_widget_version"] = st.session_state.get("upload_widget_version", 0) + 1
-
-
-def reset_upload_state(clear_file: bool = True) -> None:
-    keys_to_clear = [
-        "upload_response",
-        "processed_path",
-        "chunks",
-        "eval_report",
-        "manual_chunk_query",
-        "special_case_example",
-        "inspect_section_filter",
-        "inspect_type_filter",
-        "inspect_search_query",
-        "vector_retrieval_query",
-        "vector_top_k",
-    ]
-    for key in keys_to_clear:
-        st.session_state.pop(key, None)
-
-    st.session_state["active_upload_signature"] = None
-    if clear_file:
-        rotate_upload_widget()
-
-
-def uploaded_file_signature(uploaded_file: Any | None) -> str | None:
-    if uploaded_file is None:
-        return None
-    return f"{uploaded_file.name}:{uploaded_file.size}:{uploaded_file.type}"
 
 
 def check_health(base_url: str) -> tuple[bool, str]:
     try:
         response = requests.get(f"{base_url}/health", timeout=5)
         if response.ok:
-            payload = response.json()
-            return True, f"{payload.get('app', 'API')} / {payload.get('env', 'unknown')}"
-        return False, f"HTTP {response.status_code}: {response.text[:200]}"
+            return True, "Backend is ready."
+        return False, f"Backend returned HTTP {response.status_code}."
     except requests.RequestException:
         return (
             False,
-            "FastAPI backend is not running at this URL. Start it with: "
-            "uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+            "Cannot connect to backend. Please run: uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
         )
 
 
-def upload_to_api(base_url: str, uploaded_file: Any, index_to_chroma: bool) -> dict[str, Any]:
+def upload_document(base_url: str, uploaded_file: Any, index_to_chroma: bool = True) -> dict[str, Any]:
     files = {
         "file": (
             uploaded_file.name,
@@ -107,456 +82,505 @@ def upload_to_api(base_url: str, uploaded_file: Any, index_to_chroma: bool) -> d
         data={"index_to_chroma": str(index_to_chroma).lower()},
         timeout=300,
     )
-    if not response.ok:
-        raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
+    _raise_for_api_error(response)
     return response.json()
 
 
-def chunk_locally(uploaded_file: Any, index_to_chroma: bool = False) -> dict[str, Any]:
-    original_name = Path(uploaded_file.name).name
-    extension = Path(original_name).suffix.lower()
-    if extension not in SUPPORTED_EXTENSIONS:
-        allowed = ", ".join(sorted(SUPPORTED_EXTENSIONS))
-        raise RuntimeError(f"Unsupported file type. Allowed: {allowed}")
+def retrieve_chunks(base_url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    response = requests.post(f"{base_url}/retrieve", json=payload, timeout=120)
+    _raise_for_api_error(response)
+    return response.json()
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
-    raw_path = RAW_DIR / original_name
-    raw_path.write_bytes(uploaded_file.getvalue())
+def chat_once(base_url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    response = requests.post(f"{base_url}/chat", json=payload, timeout=180)
+    _raise_for_api_error(response)
+    return response.json()
 
-    chunks = chunk_10k_file(raw_path)
-    if not chunks:
-        raise RuntimeError("No extractable chunks were created.")
 
-    artifacts = build_chunk_artifact_paths(PROCESSED_DIR, raw_path)
-    write_chunks_jsonl(artifacts["versioned_chunks"], chunks)
-    write_chunks_jsonl(artifacts["latest_chunks"], chunks)
+def stream_chat(base_url: str, payload: dict[str, Any]):
+    with requests.post(f"{base_url}/chat/stream", json=payload, stream=True, timeout=180) as response:
+        _raise_for_api_error(response)
+        for line in response.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data:"):
+                continue
+            yield json.loads(line.removeprefix("data:").strip())
 
-    eval_report = evaluate_chunk_records(load_chunks_jsonl(artifacts["versioned_chunks"]))
-    write_eval_report(artifacts["versioned_eval"], eval_report)
-    write_eval_report(artifacts["latest_eval"], eval_report)
-    collection_name = collection_name_from_file(original_name)
-    indexed = False
-    vector_count: int | None = None
-    indexing_error: str | None = None
 
-    if index_to_chroma:
-        try:
-            index_result = index_documents(chunks, collection_name)
-            indexed = True
-            vector_count = index_result["vector_count"]
-        except Exception as exc:
-            indexing_error = str(exc)
+def clear_memory(base_url: str, session_id: str) -> None:
+    response = requests.delete(f"{base_url}/chat/sessions/{session_id}", timeout=20)
+    _raise_for_api_error(response)
 
+
+def _raise_for_api_error(response: requests.Response) -> None:
+    if response.ok:
+        return
+    try:
+        detail = response.json().get("detail", response.text)
+    except ValueError:
+        detail = response.text
+    raise RuntimeError(str(detail))
+
+
+def friendly_error(error: Exception, developer_mode: bool) -> str:
+    message = str(error)
+    if "NVIDIA_API_KEY" in message:
+        return "LLM API key is not configured. Please set NVIDIA_API_KEY in your environment."
+    if "Connection" in message or "connect" in message.lower():
+        return "Cannot connect to backend. Please run: uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+    if "Collection name is required" in message or "does not exist" in message.lower():
+        return "Please upload and process a document first."
+    if "no results" in message.lower() or "no chunks" in message.lower():
+        return "I could not find relevant information in the uploaded document."
+    if developer_mode:
+        return message
+    return "Something went wrong while processing your request."
+
+
+def build_metadata_filter(section_item: str) -> dict[str, Any] | None:
+    section_item = section_item.strip()
+    if not section_item:
+        return None
+    return {"section_item": section_item}
+
+
+def make_chat_payload(question: str, settings: dict[str, Any]) -> dict[str, Any]:
     return {
-        "file_name": original_name,
-        "status": 200,
-        "total_chunks": len(chunks),
-        "message": f"Locally chunked successfully. Debug chunks: {artifacts['versioned_chunks']}",
-        "processed_path": str(artifacts["versioned_chunks"]),
-        "latest_processed_path": str(artifacts["latest_chunks"]),
-        "eval_report_path": str(artifacts["versioned_eval"]),
-        "latest_eval_report_path": str(artifacts["latest_eval"]),
-        "chunk_quality_score": eval_report["score"],
-        "indexed": indexed,
-        "collection_name": collection_name,
-        "vector_count": vector_count,
-        "indexing_error": indexing_error,
+        "question": question,
+        "collection_name": settings["collection_name"],
+        "top_k": settings["top_k"],
+        "candidate_k": settings["candidate_k"],
+        "retrieval_mode": settings["retrieval_mode"],
+        "rerank": settings["rerank"],
+        "session_id": settings["session_id"],
+        "use_memory": settings["use_memory"],
+        "metadata_filter": build_metadata_filter(settings["section_filter"]),
     }
 
 
-def resolve_processed_path(upload_response: dict[str, Any]) -> Path:
-    processed_path = upload_response.get("processed_path")
-    if processed_path:
-        path = Path(processed_path)
-        return path if path.is_absolute() else Path.cwd() / path
+def render_sidebar() -> tuple[bool, bool, dict[str, Any]]:
+    with st.sidebar:
+        st.subheader("Status")
+        developer_mode = st.checkbox("Developer Mode", value=False)
 
-    file_name = upload_response.get("file_name", "")
-    return Path.cwd() / "data" / "processed" / f"{Path(file_name).stem}.chunks.jsonl"
+        if developer_mode:
+            with st.expander("Advanced settings", expanded=True):
+                st.session_state["api_url"] = st.text_input("API Base URL", value=api_url())
+                collection_name = st.text_input(
+                    "collection_name",
+                    value=st.session_state.get("active_collection_name", ""),
+                )
+                session_id = st.text_input("session_id", value=st.session_state.get("session_id", "default"))
+                retrieval_mode = st.selectbox("retrieval_mode", ["hybrid", "vector", "keyword"])
+                rerank = st.checkbox("rerank", value=True)
+                stream = st.checkbox("stream", value=True)
+                use_memory = st.checkbox("memory", value=True)
+                top_k = st.slider("top_k", 1, 20, DEFAULT_CHAT_SETTINGS["top_k"])
+                candidate_k = st.slider("candidate_k", 1, 50, DEFAULT_CHAT_SETTINGS["candidate_k"])
+                section_filter = st.text_input("section filter", value="")
+        else:
+            collection_name = st.session_state.get("active_collection_name", "")
+            session_id = st.session_state.get("session_id", "default")
+            retrieval_mode = DEFAULT_CHAT_SETTINGS["retrieval_mode"]
+            rerank = DEFAULT_CHAT_SETTINGS["rerank"]
+            stream = DEFAULT_CHAT_SETTINGS["stream"]
+            use_memory = DEFAULT_CHAT_SETTINGS["use_memory"]
+            top_k = DEFAULT_CHAT_SETTINGS["top_k"]
+            candidate_k = DEFAULT_CHAT_SETTINGS["candidate_k"]
+            section_filter = DEFAULT_CHAT_SETTINGS["section_filter"]
+
+        healthy, health_message = check_health(api_url())
+        if healthy:
+            st.success("Ready")
+        else:
+            st.warning("Backend unavailable")
+            st.caption(health_message)
+
+        st.divider()
+        st.subheader("Upload document")
+        uploaded_file = st.file_uploader(
+            "PDF or TXT",
+            type=["pdf", "txt"],
+            key=f"financial_doc_{st.session_state['upload_widget_version']}",
+        )
+        index_to_chroma = True
+        if developer_mode:
+            index_to_chroma = st.checkbox("Index into Chroma", value=True)
+
+        process_clicked = st.button(
+            "Process document",
+            type="primary",
+            disabled=uploaded_file is None or not healthy,
+            use_container_width=True,
+        )
+
+        if process_clicked and uploaded_file is not None:
+            process_uploaded_document(uploaded_file, index_to_chroma, developer_mode)
+
+    settings = {
+        "collection_name": collection_name,
+        "session_id": session_id,
+        "retrieval_mode": retrieval_mode,
+        "rerank": rerank,
+        "stream": stream,
+        "use_memory": use_memory,
+        "top_k": top_k,
+        "candidate_k": candidate_k,
+        "section_filter": section_filter,
+    }
+    return healthy, developer_mode, settings
 
 
-def load_chunks(path: Path) -> list[dict[str, Any]]:
-    return load_chunks_jsonl(path)
+def process_uploaded_document(uploaded_file: Any, index_to_chroma: bool, developer_mode: bool) -> None:
+    with st.spinner("Processing your document..."):
+        try:
+            response = upload_document(api_url(), uploaded_file, index_to_chroma=index_to_chroma)
+        except Exception as exc:
+            st.error(friendly_error(exc, developer_mode))
+            if developer_mode:
+                st.exception(exc)
+            return
+
+    st.session_state["upload_response"] = response
+    st.session_state["active_document_name"] = response.get("file_name", uploaded_file.name)
+    st.session_state["active_collection_name"] = response.get("collection_name", "")
+    st.session_state["document_ready"] = bool(response.get("indexed") and response.get("collection_name"))
+    st.session_state["chat_messages"] = []
+    st.session_state["last_raw_response"] = response
+
+    if st.session_state["document_ready"]:
+        st.success("Your document is ready. You can now ask questions.")
+    elif response.get("indexing_error"):
+        st.warning(friendly_error(RuntimeError(response["indexing_error"]), developer_mode))
+    else:
+        st.warning("Document was processed, but it was not indexed for chat.")
 
 
-def load_eval_report(path: Path | None) -> dict[str, Any] | None:
-    if path is None or not path.exists():
+def render_user_mode(healthy: bool, settings: dict[str, Any]) -> None:
+    st.title("FinDocAI")
+    st.caption("Ask questions about your financial documents.")
+
+    render_document_card(developer_mode=False)
+    render_suggested_questions(healthy, settings, developer_mode=False)
+    render_chat_area(healthy, settings, developer_mode=False)
+
+
+def render_developer_mode(healthy: bool, settings: dict[str, Any]) -> None:
+    st.title("FinDocAI")
+    st.caption("Ask questions about your financial documents.")
+
+    tab_chat, tab_retriever, tab_eval = st.tabs(["Chat", "Retriever Debug", "Golden Evals"])
+    with tab_chat:
+        render_document_card(developer_mode=True)
+        render_suggested_questions(healthy, settings, developer_mode=True)
+        render_chat_area(healthy, settings, developer_mode=True)
+        if st.session_state.get("last_raw_response") is not None:
+            with st.expander("Raw JSON response", expanded=False):
+                st.json(st.session_state["last_raw_response"])
+
+    with tab_retriever:
+        render_retriever_debug(healthy, settings)
+
+    with tab_eval:
+        render_golden_evals()
+
+
+def render_document_card(developer_mode: bool) -> None:
+    with st.container(border=True):
+        document_name = st.session_state.get("active_document_name") or "No document processed"
+        if st.session_state.get("document_ready"):
+            st.success("Your document is ready. You can now ask questions.")
+            st.write(f"Document: **{document_name}**")
+        else:
+            st.info("Upload a financial document to start asking questions.")
+
+        if developer_mode and st.session_state.get("upload_response"):
+            response = st.session_state["upload_response"]
+            cols = st.columns(4)
+            cols[0].metric("Chunks", response.get("total_chunks", 0))
+            cols[1].metric("Vectors", response.get("vector_count") or 0)
+            cols[2].metric("Chunk score", response.get("chunk_quality_score") or 0)
+            cols[3].write(f"Collection: `{response.get('collection_name')}`")
+
+
+def render_suggested_questions(healthy: bool, settings: dict[str, Any], developer_mode: bool) -> None:
+    st.subheader("Suggested questions")
+    cols = st.columns(2)
+    selected_question = None
+    for index, question in enumerate(SUGGESTED_QUESTIONS):
+        if cols[index % 2].button(question, use_container_width=True, disabled=not can_chat(healthy)):
+            selected_question = question
+
+    if selected_question:
+        submit_question(selected_question, settings, developer_mode)
+
+
+def render_chat_area(healthy: bool, settings: dict[str, Any], developer_mode: bool) -> None:
+    st.subheader("Chat")
+    clear_cols = st.columns([1, 4])
+    if clear_cols[0].button("Clear chat", use_container_width=True):
+        clear_chat(settings["session_id"], developer_mode)
+
+    for message in st.session_state.get("chat_messages", []):
+        with st.chat_message(message["role"]):
+            if message.get("warning"):
+                st.warning(message["content"])
+            else:
+                st.markdown(message["content"])
+            if message.get("sources"):
+                render_sources(message["sources"], developer_mode=developer_mode)
+
+    if not st.session_state.get("document_ready"):
+        st.info("Upload a financial document to start asking questions.")
+
+    user_input = st.chat_input(
+        "Ask about this financial document...",
+        disabled=not can_chat(healthy),
+    )
+    if user_input:
+        submit_question(user_input, settings, developer_mode)
+
+
+def submit_question(question: str, settings: dict[str, Any], developer_mode: bool) -> None:
+    if not st.session_state.get("document_ready"):
+        st.warning("Please upload and process a document first.")
+        return
+
+    payload = make_chat_payload(question, settings)
+    st.session_state["chat_messages"].append({"role": "user", "content": question})
+
+    with st.chat_message("user"):
+        st.markdown(question)
+
+    with st.chat_message("assistant"):
+        if settings["stream"]:
+            answer, sources, raw_response = run_streaming_chat(payload, developer_mode)
+        else:
+            answer, sources, raw_response = run_non_streaming_chat(payload, developer_mode)
+
+        warning = is_insufficient_context(answer)
+        if warning:
+            st.warning("I could not find enough information in the uploaded document.")
+        elif not settings["stream"]:
+            st.markdown(answer)
+        render_sources(sources, developer_mode=developer_mode)
+
+    st.session_state["chat_messages"].append(
+        {"role": "assistant", "content": answer, "sources": sources, "warning": warning}
+    )
+    st.session_state["last_raw_response"] = raw_response
+
+
+def run_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+    answer_placeholder = st.empty()
+    answer = ""
+    sources: list[dict[str, Any]] = []
+    raw_events: list[dict[str, Any]] = []
+
+    try:
+        for event in stream_chat(api_url(), payload):
+            raw_events.append(event)
+            event_type = event.get("type")
+            if event_type == "token":
+                answer += event.get("content", "")
+                answer_placeholder.markdown(answer)
+            elif event_type == "sources":
+                sources = event.get("sources", [])
+            elif event_type == "error":
+                raise RuntimeError(event.get("message", "Streaming failed."))
+    except Exception as exc:
+        message = friendly_error(exc, developer_mode)
+        st.error(message)
+        if developer_mode:
+            st.exception(exc)
+        return message, [], {"error": str(exc), "events": raw_events}
+
+    return answer, sources, {"events": raw_events}
+
+
+def run_non_streaming_chat(payload: dict[str, Any], developer_mode: bool) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+    with st.spinner("Thinking..."):
+        try:
+            result = chat_once(api_url(), payload)
+        except Exception as exc:
+            message = friendly_error(exc, developer_mode)
+            st.error(message)
+            if developer_mode:
+                st.exception(exc)
+            return message, [], {"error": str(exc)}
+
+    return result.get("answer", ""), result.get("sources", []), result
+
+
+def clear_chat(session_id: str, developer_mode: bool) -> None:
+    st.session_state["chat_messages"] = []
+    try:
+        clear_memory(api_url(), session_id)
+    except Exception as exc:
+        if developer_mode:
+            st.warning(f"Could not clear backend memory: {exc}")
+    st.success("Chat cleared.")
+
+
+def can_chat(healthy: bool) -> bool:
+    return bool(healthy and st.session_state.get("document_ready"))
+
+
+def is_insufficient_context(answer: str) -> bool:
+    return "provided documents do not contain enough information" in answer.lower()
+
+
+def render_sources(sources: list[dict[str, Any]], developer_mode: bool) -> None:
+    if not sources:
+        return
+
+    st.markdown("**Sources**")
+    for index, source in enumerate(sources, start=1):
+        section_item = source.get("section_item") or "UNKNOWN"
+        section_title = source.get("section_title") or "Untitled section"
+        label = f"Source {index}: Item {section_item} - {section_title}"
+        with st.expander(label, expanded=index == 1):
+            cols = st.columns(3)
+            cols[0].write(f"Section: `Item {section_item}`")
+            cols[1].write(f"Page: `{_page_range(source)}`")
+            cols[2].write(f"Relevance score: `{_format_score(source.get('score') or source.get('final_score'))}`")
+            st.write(source.get("preview") or "")
+            if developer_mode:
+                st.write(f"chunk_id: `{source.get('chunk_id')}`")
+                st.json(source, expanded=False)
+
+
+def render_retriever_debug(healthy: bool, settings: dict[str, Any]) -> None:
+    st.subheader("Retriever Debug")
+    collection_name = st.text_input("Collection", value=settings["collection_name"], key="debug_collection")
+    question = st.text_input("Question", key="debug_question")
+
+    cols = st.columns(5)
+    retrieval_mode = cols[0].selectbox("Mode", ["hybrid", "vector", "keyword"], key="debug_mode")
+    rerank = cols[1].checkbox("Rerank", value=settings["rerank"], key="debug_rerank")
+    top_k = cols[2].slider("Top k", 1, 20, settings["top_k"], key="debug_top_k")
+    candidate_k = cols[3].slider("Candidate k", 1, 50, settings["candidate_k"], key="debug_candidate_k")
+    section_filter = cols[4].text_input("Section", value=settings["section_filter"], key="debug_section")
+
+    if st.button("Retrieve", type="primary", disabled=not healthy):
+        payload = {
+            "question": question,
+            "collection_name": collection_name,
+            "top_k": top_k,
+            "candidate_k": candidate_k,
+            "retrieval_mode": retrieval_mode,
+            "rerank": rerank,
+            "with_score": True,
+            "metadata_filter": build_metadata_filter(section_filter),
+        }
+        with st.spinner("Retrieving..."):
+            try:
+                result = retrieve_chunks(api_url(), payload)
+            except Exception as exc:
+                st.error(friendly_error(exc, developer_mode=True))
+                st.exception(exc)
+                return
+        st.session_state["retriever_result"] = result
+
+    result = st.session_state.get("retriever_result")
+    if result:
+        render_retrieved_chunks(result.get("chunks", []))
+        with st.expander("Raw JSON", expanded=False):
+            st.json(result)
+
+
+def render_retrieved_chunks(chunks: list[dict[str, Any]]) -> None:
+    if not chunks:
+        st.warning("No chunks returned.")
+        return
+
+    rows = []
+    for index, chunk in enumerate(chunks, start=1):
+        metadata = chunk.get("metadata", {})
+        rows.append(
+            {
+                "rank": index,
+                "score": chunk.get("score") or chunk.get("final_score"),
+                "vector_score": chunk.get("vector_score"),
+                "keyword_score": chunk.get("keyword_score"),
+                "chunk_id": metadata.get("chunk_id"),
+                "section_item": metadata.get("section_item"),
+                "chunk_type": metadata.get("chunk_type"),
+                "page": _page_range(metadata),
+                "preview": " ".join(chunk.get("page_content", "").split())[:180],
+            }
+        )
+
+    st.dataframe(rows, use_container_width=True)
+    for index, chunk in enumerate(chunks, start=1):
+        metadata = chunk.get("metadata", {})
+        title = (
+            f"#{index} {metadata.get('chunk_id') or 'unknown'} "
+            f"| Item {metadata.get('section_item') or 'UNKNOWN'} "
+            f"| {metadata.get('chunk_type') or 'UNKNOWN'}"
+        )
+        with st.expander(title, expanded=index <= 2):
+            st.text_area("Content", chunk.get("page_content", ""), height=180, key=f"retrieved_{index}")
+            st.json(chunk, expanded=False)
+
+
+def render_golden_evals() -> None:
+    st.subheader("Golden Evals")
+    st.code(
+        "\n".join(
+            [
+                "python -m app.rag.eval.chunking_eval --cases tests/golden/chunking_cases.json --output data/eval/chunking_golden_report.json",
+                "python -m app.rag.eval.retriever_eval --cases tests/golden/retriever_cases.json --output data/eval/retriever_golden_report.json",
+                '$env:RUN_LLM_EVAL="1"',
+                "python -m app.rag.eval.answer_eval --cases tests/golden/answer_cases.json --output data/eval/answer_golden_report.json",
+            ]
+        ),
+        language="powershell",
+    )
+
+    for name, path in EVAL_REPORTS.items():
+        report = load_report(path)
+        with st.expander(f"{name}: {path}", expanded=report is not None):
+            if not report:
+                st.warning("Report not found.")
+                continue
+            cols = st.columns(4)
+            cols[0].metric("Total", report.get("total_cases", 0))
+            cols[1].metric("Passed", report.get("passed_cases", 0))
+            cols[2].metric("Failed", report.get("failed_cases", 0))
+            cols[3].metric("Skipped", report.get("skipped_cases", 0))
+            st.json(report, expanded=False)
+
+
+def _page_range(value: dict[str, Any]) -> str:
+    page_start = value.get("page_start") or value.get("page_number")
+    page_end = value.get("page_end") or page_start
+    if page_start is None:
+        return "-"
+    if page_end == page_start:
+        return str(page_start)
+    return f"{page_start}-{page_end}"
+
+
+def _format_score(score: Any) -> str:
+    if score is None:
+        return "-"
+    try:
+        return f"{float(score):.4f}"
+    except (TypeError, ValueError):
+        return str(score)
+
+
+def load_report(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def get_metadata_value(chunk: dict[str, Any], key: str, default: str = "UNKNOWN") -> str:
-    value = chunk.get("metadata", {}).get(key)
-    if value is None:
-        return default
-    return str(value)
+init_state()
+healthy, developer_mode, settings = render_sidebar()
 
-
-def summarize_chunks(chunks: list[dict[str, Any]]) -> dict[str, Any]:
-    chunk_types = Counter(get_metadata_value(chunk, "chunk_type") for chunk in chunks)
-    sections = Counter(get_metadata_value(chunk, "section_item") for chunk in chunks)
-    lengths = [len(chunk.get("page_content", "")) for chunk in chunks]
-
-    return {
-        "total": len(chunks),
-        "text_chunks": chunk_types.get("section_text", 0),
-        "table_chunks": chunk_types.get("table", 0),
-        "sections": len(sections),
-        "avg_chars": int(sum(lengths) / len(lengths)) if lengths else 0,
-        "min_chars": min(lengths) if lengths else 0,
-        "max_chars": max(lengths) if lengths else 0,
-        "chunk_types": chunk_types,
-        "section_counts": sections,
-    }
-
-
-def filtered_chunks(
-    chunks: list[dict[str, Any]],
-    section_filter: list[str],
-    type_filter: list[str],
-    query: str,
-) -> list[dict[str, Any]]:
-    query_lower = query.lower().strip()
-    results: list[dict[str, Any]] = []
-
-    for chunk in chunks:
-        metadata = chunk.get("metadata", {})
-        section = str(metadata.get("section_item", "UNKNOWN"))
-        chunk_type = str(metadata.get("chunk_type", "UNKNOWN"))
-        content = chunk.get("page_content", "")
-
-        if section_filter and section not in section_filter:
-            continue
-        if type_filter and chunk_type not in type_filter:
-            continue
-        if query_lower and query_lower not in content.lower() and query_lower not in json.dumps(metadata).lower():
-            continue
-
-        results.append(chunk)
-
-    return results
-
-
-def highlight_terms(text: str, terms: list[str]) -> str:
-    escaped = text
-    for term in sorted(terms, key=len, reverse=True):
-        if not term:
-            continue
-        escaped = re.sub(
-            re.escape(term),
-            lambda match: f"**{match.group(0)}**",
-            escaped,
-            flags=re.IGNORECASE,
-        )
-    return escaped
-
-
-def render_metrics(summary: dict[str, Any]) -> None:
-    cols = st.columns(6)
-    cols[0].metric("Chunks", summary["total"])
-    cols[1].metric("Text", summary["text_chunks"])
-    cols[2].metric("Tables", summary["table_chunks"])
-    cols[3].metric("Sections", summary["sections"])
-    cols[4].metric("Avg chars", summary["avg_chars"])
-    cols[5].metric("Max chars", summary["max_chars"])
-
-
-def render_eval_report(report: dict[str, Any] | None) -> None:
-    if not report:
-        st.warning("No chunk eval report found for this upload.")
-        return
-
-    score = report.get("score", 0)
-    if score >= 85:
-        st.success(f"Chunk quality score: {score}/100")
-    elif score >= 65:
-        st.warning(f"Chunk quality score: {score}/100")
-    else:
-        st.error(f"Chunk quality score: {score}/100")
-
-    issues = report.get("issues", [])
-    if not issues:
-        st.caption("No deterministic chunking issues detected.")
-    else:
-        for issue in issues:
-            penalty = issue.get("penalty", 0)
-            count = issue.get("count")
-            ratio = issue.get("ratio")
-            metric_bits = [f"penalty={penalty}"]
-            if count is not None:
-                metric_bits.append(f"count={count}")
-            if ratio is not None:
-                metric_bits.append(f"ratio={ratio:.1%}")
-            st.markdown(
-                f"- `{issue.get('severity')}` `{issue.get('code')}` "
-                f"({', '.join(metric_bits)}): {issue.get('message')}"
-            )
-            if issue.get("examples"):
-                st.json(issue["examples"], expanded=False)
-
-    with st.expander("Section Page Ranges", expanded=False):
-        st.dataframe(report.get("section_page_ranges", []), use_container_width=True)
-
-
-def render_chunk(chunk: dict[str, Any], index: int) -> None:
-    metadata = chunk.get("metadata", {})
-    chunk_id = metadata.get("chunk_id", f"chunk-{index}")
-    chunk_type = metadata.get("chunk_type", "UNKNOWN")
-    section_item = metadata.get("section_item", "UNKNOWN")
-    section_title = metadata.get("section_title", "")
-    page_start = metadata.get("page_start") or metadata.get("page_number")
-    page_end = metadata.get("page_end") or page_start
-    content = chunk.get("page_content", "")
-
-    title = f"{chunk_id} | {chunk_type} | Item {section_item}"
-    with st.expander(title, expanded=index < 3):
-        top = st.columns([2, 2, 1, 1])
-        top[0].caption(f"Section: {section_title}")
-        top[1].caption(f"Pages: {page_start}-{page_end}")
-        top[2].caption(f"Chars: {len(content)}")
-        top[3].caption(f"Type: {chunk_type}")
-
-        if chunk_type == "table":
-            st.info(metadata.get("table_summary", "Table chunk"))
-
-        st.text_area(
-            "Content",
-            value=content,
-            height=220 if chunk_type == "table" else 180,
-            key=f"content_{index}_{chunk_id}",
-        )
-        st.json(metadata, expanded=False)
-
-
-def render_retrieval_result(result: dict[str, Any], index: int) -> None:
-    chunk = result["chunk"]
-    metadata = chunk.get("metadata", {})
-    content = chunk.get("page_content", "")
-    chunk_id = metadata.get("chunk_id", f"chunk-{index}")
-    section_item = metadata.get("section_item", "UNKNOWN")
-    section_title = metadata.get("section_title", "")
-    chunk_type = metadata.get("chunk_type", "UNKNOWN")
-    page_start = metadata.get("page_start") or metadata.get("page_number")
-    page_end = metadata.get("page_end") or page_start
-    matched_terms = result["matched_terms"]
-
-    with st.expander(
-        f"#{index + 1} score={result['score']} | {chunk_id} | Item {section_item} | {chunk_type}",
-        expanded=index < 3,
-    ):
-        cols = st.columns([2, 2, 1])
-        cols[0].caption(f"Section: {section_title}")
-        cols[1].caption(f"Pages: {page_start}-{page_end}")
-        cols[2].caption(f"Matched: {', '.join(matched_terms) if matched_terms else '-'}")
-
-        st.markdown(highlight_terms(content, matched_terms))
-        st.json(metadata, expanded=False)
-
-
-init_upload_state()
-if st.session_state.get("clear_uploader_on_next_run"):
-    rotate_upload_widget()
-    st.session_state["clear_uploader_on_next_run"] = False
-
-st.title("10-K Chunking QA")
-
-with st.sidebar:
-    st.subheader("Mode")
-    mode = st.radio(
-        "Chunking mode",
-        ["Local chunking", "API /upload"],
-        index=0,
-        key="chunking_mode_v2",
-        horizontal=False,
-        help="Use Local chunking for quality review. Use API /upload only when FastAPI is running.",
-    )
-
-    healthy = False
-    if mode == "API /upload":
-        st.subheader("Backend")
-        st.session_state["api_url"] = st.text_input("API URL", value=api_url())
-
-        healthy, health_message = check_health(api_url())
-        if healthy:
-            st.success(f"Connected: {health_message}")
-        else:
-            st.warning("API unavailable")
-            st.code("uvicorn app.main:app --reload --host 127.0.0.1 --port 8000", language="powershell")
-            st.caption(health_message)
-    else:
-        st.info("Local chunking does not require FastAPI.")
-
-    st.divider()
-    st.subheader("Upload")
-    st.caption(f"Upload slot #{st.session_state['upload_widget_version']}")
-    uploader_key = f"tenk_file_uploader_{st.session_state['upload_widget_version']}"
-    uploaded_file = st.file_uploader("10-K PDF/TXT", type=["pdf", "txt"], key=uploader_key)
-    index_to_chroma = st.checkbox(
-        "Index chunks in Chroma",
-        value=False,
-        help="Creates embeddings and stores chunks in Chroma. First run can be slow if the embedding model is not cached.",
-    )
-    current_signature = uploaded_file_signature(uploaded_file)
-
-    active_signature = st.session_state.get("active_upload_signature")
-    if current_signature is not None and active_signature is not None and current_signature != active_signature:
-        reset_upload_state(clear_file=False)
-        st.rerun()
-
-    action_cols = st.columns(2)
-    upload_clicked = action_cols[0].button(
-        "Upload and chunk",
-        type="primary",
-        disabled=uploaded_file is None or (mode == "API /upload" and not healthy),
-    )
-    clear_clicked = action_cols[1].button("Clear", disabled=uploaded_file is None and not st.session_state.get("chunks"))
-
-    if clear_clicked:
-        reset_upload_state(clear_file=True)
-        st.rerun()
-
-if upload_clicked and uploaded_file is not None:
-    with st.spinner("Uploading and chunking document..."):
-        try:
-            if mode == "API /upload":
-                response_payload = upload_to_api(api_url(), uploaded_file, index_to_chroma)
-            else:
-                response_payload = chunk_locally(uploaded_file, index_to_chroma)
-            processed_path = resolve_processed_path(response_payload)
-            chunks = load_chunks(processed_path)
-            eval_report_path = response_payload.get("eval_report_path")
-            eval_report = load_eval_report(
-                Path(eval_report_path) if eval_report_path else None
-            )
-        except Exception as exc:
-            st.error(str(exc))
-        else:
-            st.session_state["upload_response"] = response_payload
-            st.session_state["processed_path"] = str(processed_path)
-            st.session_state["chunks"] = chunks
-            st.session_state["eval_report"] = eval_report
-            st.session_state["active_upload_signature"] = uploaded_file_signature(uploaded_file)
-            st.session_state["clear_uploader_on_next_run"] = True
-            st.rerun()
-
-chunks = st.session_state.get("chunks", [])
-upload_response = st.session_state.get("upload_response")
-
-if not chunks:
-    st.info("Upload a real 10-K PDF or TXT file to inspect generated chunks.")
-    st.stop()
-
-summary = summarize_chunks(chunks)
-
-st.subheader("Upload Result")
-result_cols = st.columns([2, 1, 3])
-result_cols[0].write(upload_response.get("file_name") if upload_response else "")
-result_cols[1].write(f"{summary['total']} chunks")
-result_cols[2].code(st.session_state.get("processed_path", ""), language="text")
-
-if upload_response:
-    index_cols = st.columns([2, 1, 3])
-    index_cols[0].write(f"Collection: `{upload_response.get('collection_name')}`")
-    index_cols[1].write(f"Indexed: `{upload_response.get('indexed')}`")
-    if upload_response.get("indexing_error"):
-        index_cols[2].warning(upload_response["indexing_error"])
-    elif upload_response.get("indexed"):
-        index_cols[2].success(f"{upload_response.get('vector_count')} vectors stored in Chroma")
-
-render_metrics(summary)
-
-st.subheader("Chunk Quality Eval")
-render_eval_report(st.session_state.get("eval_report"))
-
-left, right = st.columns([1, 1])
-with left:
-    st.subheader("Chunks by Section")
-    st.bar_chart(dict(summary["section_counts"]))
-
-with right:
-    st.subheader("Chunks by Type")
-    st.bar_chart(dict(summary["chunk_types"]))
-
-st.subheader("Manual Chunk QA")
-retrieval_tab, vector_tab, inspect_tab = st.tabs(["Query JSONL Chunks", "Vector Retrieval", "Inspect Chunks"])
-
-sections = sorted(summary["section_counts"].keys())
-types = sorted(summary["chunk_types"].keys())
-
-with retrieval_tab:
-    st.caption(
-        "This searches the chunk JSONL produced by the latest upload. "
-        "It is a deterministic keyword retriever for testing chunk quality before embeddings/Chroma."
-    )
-    query_cols = st.columns([5, 1])
-    manual_query = query_cols[0].text_input(
-        "Manual test query",
-        placeholder="Example: Net cash provided by operating activities",
-        key="manual_chunk_query",
-    )
-    top_k = query_cols[1].number_input("Top k", min_value=1, max_value=20, value=5, step=1)
-
-    examples = [
-        "Net cash provided by operating activities",
-        "free cash flow less principal repayments",
-        "risk factors competition regulation",
-        "management discussion revenue growth",
-        "financial statements supplementary data cash flows",
-    ]
-    selected_example = st.selectbox("Special-case examples", [""] + examples, key="special_case_example")
-    effective_query = manual_query.strip() or selected_example.strip()
-
-    if effective_query:
-        results = retrieve_from_chunk_records(chunks, effective_query, int(top_k))
-        st.caption(f"Retrieved {len(results)} chunks from {len(chunks)} JSONL chunks")
-        if not results:
-            st.warning("No matching chunks found. Try fewer words or a phrase from the source document.")
-        for index, result in enumerate(results):
-            render_retrieval_result(result, index)
-    else:
-        st.info("Enter a query or choose an example to test whether the chunk JSONL contains the expected context.")
-
-with vector_tab:
-    st.caption("This queries Chroma for the current collection. It requires indexing to be enabled during upload.")
-    collection_name = upload_response.get("collection_name") if upload_response else None
-    vector_query_cols = st.columns([5, 1])
-    vector_query = vector_query_cols[0].text_input(
-        "Vector retrieval query",
-        placeholder="Example: revenue growth drivers",
-        key="vector_retrieval_query",
-    )
-    vector_top_k = vector_query_cols[1].number_input(
-        "Vector top k",
-        min_value=1,
-        max_value=20,
-        value=5,
-        step=1,
-        key="vector_top_k",
-    )
-    if not upload_response or not upload_response.get("indexed"):
-        st.info("Upload with `Index chunks in Chroma` enabled to use vector retrieval.")
-    elif vector_query.strip():
-        try:
-            vector_docs = similarity_search(vector_query, collection_name, k=int(vector_top_k))
-        except Exception as exc:
-            st.error(str(exc))
-        else:
-            st.caption(f"Retrieved {len(vector_docs)} chunks from `{collection_name}`")
-            for index, document in enumerate(vector_docs):
-                render_chunk(
-                    {"page_content": document.page_content, "metadata": document.metadata},
-                    index,
-                )
-
-with inspect_tab:
-    filters = st.columns([2, 2, 3])
-    section_filter = filters[0].multiselect("Section", sections, key="inspect_section_filter")
-    type_filter = filters[1].multiselect("Chunk type", types, key="inspect_type_filter")
-    query = filters[2].text_input("Search content or metadata", key="inspect_search_query")
-
-    visible_chunks = filtered_chunks(chunks, section_filter, type_filter, query)
-    st.caption(f"Showing {len(visible_chunks)} of {len(chunks)} chunks")
-
-    for index, chunk in enumerate(visible_chunks):
-        render_chunk(chunk, index)
+if developer_mode:
+    render_developer_mode(healthy, settings)
+else:
+    render_user_mode(healthy, settings)

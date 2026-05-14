@@ -1,159 +1,71 @@
-# FinDocAI — 10-K RAG Assistant
+# FinDocAI - 10-K RAG Assistant
 
-FinDocAI is a learning-focused finance RAG project for ingesting, chunking, indexing, retrieving, and evaluating SEC 10-K reports.
+FinDocAI is a learning-focused finance RAG project for SEC 10-K reports. It supports upload, section/table-aware chunking, Chroma indexing, hybrid retrieval, reranking, answer generation with citations, Streamlit demo UI, and golden evals.
 
-The current implementation focuses on the ingestion and retrieval foundation:
+> Educational and research use only. This project does not provide investment advice, recommendations, or buy/sell/hold decisions.
 
-- PDF/TXT 10-K upload
-- 10-K section-aware chunking
-- table-aware chunking
-- JSONL chunk artifacts
-- deterministic chunk quality eval
-- keyword retrieval over chunk JSONL
-- Chroma vector store indexing
-- vector retrieval with debug scores
-- golden chunking eval
-- golden retriever eval
-- Streamlit QA interface
-
-> This project is for research and education only. It does not provide investment advice, stock recommendations, or buy/sell/hold decisions.
-
----
-
-## Current Status
-
-The project currently supports this flow:
+## Current Flow
 
 ```text
 10-K PDF/TXT
--> loader.py
--> section_detector.py
--> table_detector.py
--> splitter.py
--> chunk_pipeline.py
--> chunk JSONL + chunk eval report
--> optional embeddings
--> Chroma vector store
--> keyword/vector retrieval
--> golden eval runners
+-> load pages
+-> detect 10-K sections
+-> split section/table chunks
+-> write chunk JSONL + chunk eval
+-> index chunks into Chroma
+-> retrieve candidates by vector / keyword / hybrid
+-> optional heuristic reranking
+-> build grounded RAG prompt
+-> NVIDIA LLM answer
+-> answer + source citations
 ```
-
-Answer generation with an LLM is not the active focus yet. The current goal is to make chunking and retrieval reliable before connecting `/chat` to full RAG answer generation.
-
----
-
-## Main Components
-
-| Area | Main Files | Status |
-| --- | --- | --- |
-| Document loading | `app/rag/loader.py` | Reads PDF/TXT page content. No OCR yet. |
-| Section detection | `app/rag/section_detector.py` | Detects 10-K Items and filters TOC/index/cross-reference false positives. |
-| Table detection | `app/rag/table_detector.py` | Heuristic table block detection. Good enough for current AAPL/AMZN eval, still improvable. |
-| Splitting | `app/rag/splitter.py` | Section-aware, table-aware, recursive chunks. Splits oversized table/list blocks. |
-| Chunk pipeline | `app/rag/chunk_pipeline.py` | Orchestrates load -> section detect -> split -> LangChain `Document`s. |
-| Chunk artifacts | `app/rag/chunk_artifacts.py` | Writes versioned/latest JSONL and deterministic eval reports. |
-| Keyword retrieval | `app/rag/keyword_retriever.py` | Reusable JSONL keyword retriever for manual/golden eval. |
-| Embeddings | `app/rag/embeddings.py` | Sentence-transformers embedding model. |
-| Vector store | `app/rag/vector_store.py` | Chroma indexing/search/reset/rebuild plus embedding manifest checks. |
-| Retriever | `app/rag/retriever.py` | Thin wrapper around vector search. |
-| Upload API | `app/api/routes_upload.py` | Upload, chunk, eval, optional Chroma indexing. |
-| Retrieval API | `app/api/routes_retrieval.py` | Vector retrieval with optional scores/filtering. |
-| Streamlit QA | `frontend/streamlit_app.py` | Upload/chunk QA, eval display, keyword query, vector query. |
-| Golden eval | `app/rag/eval/*.py` | Chunking and retriever golden evaluation runners. |
-
----
-
-## Project Structure
-
-```text
-findocAI/
-├── app/
-│   ├── api/
-│   │   ├── routes_health.py
-│   │   ├── routes_retrieval.py
-│   │   └── routes_upload.py
-│   ├── core/
-│   │   └── config.py
-│   ├── rag/
-│   │   ├── eval/
-│   │   │   ├── chunking_eval.py
-│   │   │   └── retriever_eval.py
-│   │   ├── chunk_artifacts.py
-│   │   ├── chunk_models.py
-│   │   ├── chunk_pipeline.py
-│   │   ├── embeddings.py
-│   │   ├── keyword_retriever.py
-│   │   ├── loader.py
-│   │   ├── retriever.py
-│   │   ├── section_detector.py
-│   │   ├── splitter.py
-│   │   ├── table_detector.py
-│   │   └── vector_store.py
-│   ├── schemas/
-│   └── main.py
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   ├── chroma/
-│   └── eval/
-├── frontend/
-│   └── streamlit_app.py
-├── tests/
-│   ├── golden/
-│   │   ├── chunking_cases.json
-│   │   └── retriever_cases.json
-│   ├── test_chunking_golden_eval.py
-│   ├── test_chunking_pipeline.py
-│   ├── test_keyword_retriever.py
-│   ├── test_retriever_golden_eval.py
-│   ├── test_upload_api.py
-│   └── test_vector_store.py
-└── requirements.txt
-```
-
----
 
 ## Setup
 
-Create and activate a virtual environment:
-
 ```powershell
+cd C:\Users\Admin\Documents\findocAI
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```powershell
 python -m pip install -r requirements.txt
 ```
 
-Create `.env` from `.env.example` if needed. For chunking and local eval, LLM keys are not required.
-
-Important environment variables:
+Create or update `.env`:
 
 ```env
+LLM_PROVIDER=nvidia
+NVIDIA_API_KEY=your_nvidia_api_key_here
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=deepseek-ai/deepseek-v4-flash
+NVIDIA_TEMPERATURE=0.2
+NVIDIA_TOP_P=0.95
+NVIDIA_MAX_TOKENS=4096
+NVIDIA_REASONING_ENABLED=false
+NVIDIA_REASONING_EFFORT=high
+
 EMBEDDING_PROVIDER=sentence_transformers
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 CHROMA_PERSIST_DIR=data/chroma
+
+RAG_MAX_CHARS_PER_CHUNK=1800
+RAG_MAX_TOTAL_CONTEXT_CHARS=12000
+RERANK_ENABLED=true
+RERANK_TOP_K=5
 ```
 
-The first vector indexing run may download the embedding model if it is not cached.
+The first Chroma indexing run may download the embedding model if it is not cached.
 
----
+## Run
 
-## Run The App
-
-FastAPI:
+Start FastAPI:
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Streamlit QA UI:
+Start Streamlit:
 
 ```powershell
-streamlit run frontend\streamlit_app.py
+streamlit run frontend/streamlit_app.py
 ```
 
 Open:
@@ -162,256 +74,171 @@ Open:
 http://127.0.0.1:8501
 ```
 
-Recommended local QA workflow:
+Demo workflow:
 
-1. Select `Local chunking`.
+1. Open `Upload & Index`.
 2. Upload a 10-K PDF/TXT.
-3. Inspect chunk score and section page ranges.
-4. Query `Query JSONL Chunks` for deterministic keyword retrieval.
-5. Optionally enable `Index chunks in Chroma`.
-6. Query `Vector Retrieval`.
+3. Keep `Index into Chroma` enabled.
+4. Copy or use the returned `collection_name`.
+5. Open `Retriever Debug` to compare `vector`, `keyword`, and `hybrid`.
+6. Open `Chat with Document`.
+7. Ask questions with streaming on and inspect sources.
 
----
+## API
 
-## API Endpoints
-
-| Method | Endpoint | Description |
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | API health check |
-| `POST` | `/upload` | Upload, chunk, eval, and optionally index a document |
-| `POST` | `/retrieve` | Retrieve chunks from a Chroma collection |
+| `GET` | `/health` | Health check |
+| `POST` | `/upload` | Upload, chunk, eval, optionally index into Chroma |
+| `POST` | `/retrieve` | Debug retrieval with vector/keyword/hybrid and optional rerank |
+| `POST` | `/chat` | Non-streaming RAG answer generation |
+| `POST` | `/chat/stream` | Streaming RAG answer generation as SSE |
+| `GET` | `/chat/sessions/{session_id}` | Read recent in-memory chat history |
+| `DELETE` | `/chat/sessions/{session_id}` | Clear in-memory chat history |
 
-Upload supports an optional form field:
-
-```text
-index_to_chroma=true
-```
-
-Example upload response fields:
-
-```json
-{
-  "file_name": "NASDAQ_AMZN_2022.pdf",
-  "total_chunks": 401,
-  "processed_path": "data/processed/NASDAQ_AMZN_2022.20260514-101010.chunks.jsonl",
-  "latest_processed_path": "data/processed/NASDAQ_AMZN_2022.chunks.latest.jsonl",
-  "eval_report_path": "data/processed/NASDAQ_AMZN_2022.20260514-101010.chunk_eval.json",
-  "latest_eval_report_path": "data/processed/NASDAQ_AMZN_2022.chunk_eval.latest.json",
-  "chunk_quality_score": 98,
-  "indexed": false,
-  "collection_name": "findoc_nasdaq_amzn_2022"
-}
-```
-
-Retrieve request:
-
-```json
-{
-  "question": "Where is net cash provided by operating activities reported?",
-  "collection_name": "findoc_nasdaq_amzn_2022",
-  "top_k": 5,
-  "metadata_filter": {
-    "section_item": "7"
-  },
-  "with_score": true
-}
-```
-
----
-
-## Chunk Artifacts
-
-Each upload writes versioned and latest artifacts:
-
-```text
-data/processed/<document>.<timestamp>.chunks.jsonl
-data/processed/<document>.chunks.latest.jsonl
-data/processed/<document>.<timestamp>.chunk_eval.json
-data/processed/<document>.chunk_eval.latest.json
-```
-
-Chunk metadata includes:
-
-- `chunk_id`
-- `chunk_type`
-- `section_item`
-- `section_title`
-- `page_number`
-- `page_start`
-- `page_end`
-- table metadata when applicable
-
----
-
-## Chunk Quality Eval
-
-`chunk_artifacts.evaluate_chunk_records()` performs deterministic checks:
-
-- missing core sections
-- unknown section ratio
-- duplicate `chunk_id`
-- table of contents leakage
-- non-monotonic section page ranges
-- very short chunk ratio/count
-- very long chunk ratio/count
-
-Scores are penalty-based. For example, 7 short chunks and 200 short chunks are no longer penalized equally.
-
----
-
-## Golden Chunking Eval
-
-Golden chunking cases live in:
-
-```text
-tests/golden/chunking_cases.json
-```
-
-Run:
+Upload and index:
 
 ```powershell
-python -m app.rag.eval.chunking_eval --cases tests\golden\chunking_cases.json --output data\eval\chunking_golden_report.json
+curl.exe -X POST "http://127.0.0.1:8000/upload" `
+  -F "file=@C:\Users\Admin\Documents\findocAI\data\images\raw\reports\NASDAQ_AAPL_2023.pdf" `
+  -F "index_to_chroma=true"
 ```
 
-Current sample output:
-
-```text
-Chunking Golden Eval
-- Total: 3
-- Passed: 2
-- Failed: 0
-- Skipped: 1
-- Pass rate: 100.0%
-```
-
-The skipped sample case is intentional and verifies that missing documents are skipped clearly instead of crashing.
-
----
-
-## Golden Retriever Eval
-
-Golden retriever cases live in:
-
-```text
-tests/golden/retriever_cases.json
-```
-
-Supported retriever types:
-
-- `keyword_jsonl`: deterministic keyword retrieval over chunk JSONL
-- `vector`: Chroma similarity search with scores
-
-Run:
+Retriever debug:
 
 ```powershell
-python -m app.rag.eval.retriever_eval --cases tests\golden\retriever_cases.json --output data\eval\retriever_golden_report.json
+$body = @{
+  question = "What were the drivers of net sales?"
+  collection_name = "findoc_nasdaq_aapl_2023"
+  retrieval_mode = "hybrid"
+  rerank = $true
+  top_k = 5
+  candidate_k = 20
+  with_score = $true
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/retrieve" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
-Current sample output:
+Chat:
+
+```powershell
+$body = @{
+  question = "What were the drivers of net sales?"
+  collection_name = "findoc_nasdaq_aapl_2023"
+  retrieval_mode = "hybrid"
+  rerank = $true
+  top_k = 5
+  candidate_k = 20
+  session_id = "demo-session"
+  use_memory = $true
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/chat" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+## Retrieval Modes
+
+`vector` uses Chroma similarity search with embedding scores.
+
+`keyword` reads documents from the Chroma collection and scores query terms deterministically.
+
+`hybrid` merges vector and keyword candidates by `chunk_id`, normalizes scores, and computes:
 
 ```text
-Retriever Golden Eval
-- Total: 3
-- Hit@k: 100.0%
-- MRR@k: 0.750
-- Passed: 2
-- Failed: 0
-- Skipped: 1
+hybrid_score = 0.65 * vector_norm + 0.35 * keyword_norm
 ```
 
-The skipped vector case means the target Chroma collection has not been indexed yet. This is expected until you upload with `Index chunks in Chroma` enabled or rebuild the collection manually.
+## Reranking
 
----
+The default reranker is deterministic and does not load an external model. It boosts:
 
-## Vector Store
+- exact query term matches
+- metadata section filters
+- table chunks for cash flow / statement / balance sheet questions
+- Item 7 for revenue, net sales, growth, margin, MD&A questions
+- Item 8 for cash flow, assets, liabilities, consolidated statement questions
 
-`app/rag/vector_store.py` provides:
+## Conversation Memory
 
-- `index_documents()`
-- `similarity_search()`
-- `similarity_search_with_score()`
-- `reset_collection()`
-- `rebuild_collection()`
-- embedding config manifest read/write
+Chat memory is in-memory per `session_id`. It stores recent user/assistant turns and sources. It is useful for the demo, but it is not a production database-backed memory layer.
 
-Example:
+Clear memory:
 
-```python
-from app.rag.vector_store import similarity_search_with_score
-
-results = similarity_search_with_score(
-    query="net cash provided by operating activities",
-    collection_name="findoc_nasdaq_amzn_2022",
-    k=5,
-    metadata_filter={"section_item": "7"},
-)
+```powershell
+Invoke-RestMethod -Method Delete -Uri "http://127.0.0.1:8000/chat/sessions/demo-session"
 ```
 
-The vector store writes:
+## Golden Evals
 
-```text
-data/chroma/vector_store_manifest.json
+Chunking eval:
+
+```powershell
+python -m app.rag.eval.chunking_eval --cases tests/golden/chunking_cases.json --output data/eval/chunking_golden_report.json
 ```
 
-If `EMBEDDING_MODEL` changes after indexing, the vector store raises a clear error asking you to rebuild the collection.
+Retriever eval:
 
----
+```powershell
+python -m app.rag.eval.retriever_eval --cases tests/golden/retriever_cases.json --output data/eval/retriever_golden_report.json
+```
+
+Answer eval is skipped by default because it may call the live NVIDIA LLM. Run it explicitly:
+
+```powershell
+$env:RUN_LLM_EVAL="1"
+python -m app.rag.eval.answer_eval --cases tests/golden/answer_cases.json --output data/eval/answer_golden_report.json
+```
+
+Without `RUN_LLM_EVAL=1`, answer eval reports live cases as skipped.
 
 ## Tests
+
+Run targeted RAG demo tests:
+
+```powershell
+pytest tests/test_llm_client.py tests/test_hybrid_retriever.py tests/test_reranker.py tests/test_conversation_memory.py tests/test_answer_service.py tests/test_routes_chat.py tests/test_answer_golden_eval.py
+```
 
 Run all tests:
 
 ```powershell
-python -m pytest tests -q
+pytest
 ```
 
-Current status:
+Unit tests do not call NVIDIA, Chroma, or embedding models unless explicitly mocked for that test.
 
-```text
-28 passed
-```
+## Main Files
 
-Run only golden eval tests:
+| Area | Files |
+| --- | --- |
+| Chunking | `app/rag/loader.py`, `section_detector.py`, `table_detector.py`, `splitter.py`, `chunk_pipeline.py` |
+| Artifacts | `app/rag/chunk_artifacts.py` |
+| Vector store | `app/rag/vector_store.py` |
+| Keyword retrieval | `app/rag/keyword_retriever.py` |
+| Hybrid retrieval | `app/rag/hybrid_retriever.py` |
+| Reranking | `app/rag/reranker.py` |
+| Memory | `app/rag/conversation_memory.py` |
+| Prompting | `app/rag/prompt_builder.py` |
+| LLM client | `app/rag/llm_client.py` |
+| Answer service | `app/rag/answer_service.py` |
+| APIs | `app/api/routes_upload.py`, `routes_retrieval.py`, `routes_chat.py` |
+| Streamlit | `frontend/streamlit_app.py` |
+| Golden evals | `app/rag/eval/*.py`, `tests/golden/*.json` |
 
-```powershell
-python -m pytest tests\test_chunking_golden_eval.py tests\test_retriever_golden_eval.py tests\test_keyword_retriever.py -q
-```
+## Known Non-Goals For This Phase
 
----
-
-## Current Quality Assessment
-
-Strong parts:
-
-- 10-K section detection for current AAPL/AMZN samples
-- chunk JSONL artifacts and versioning
-- deterministic chunk quality scoring
-- golden chunking eval foundation
-- golden retriever eval foundation
-- Chroma safety checks and embedding manifest
-
-Known limitations:
-
-- No OCR for scanned PDFs
-- Table detection is still heuristic
-- Vector retrieval quality is not yet benchmarked deeply
-- No hybrid retrieval yet
-- No reranking yet
-- `/chat` is not yet connected to full RAG answer generation
-
----
-
-## Suggested Next Steps
-
-1. Add more golden chunking cases for AAPL/AMZN across years.
-2. Add more golden retriever cases for finance-specific questions.
-3. Index real Chroma collections and benchmark `keyword_jsonl` vs `vector`.
-4. Implement hybrid retrieval.
-5. Add reranking for retrieved chunks.
-6. Connect `/chat` to retrieval + LLM answer generation with citations.
-
----
-
-## Disclaimer
-
-FinDocAI is for educational and research purposes only. It does not provide investment advice, investment recommendations, or predictions of future stock prices.
+- MLOps
+- MLflow integration
+- cloud deployment
+- auth and user management
+- production database memory
+- React frontend

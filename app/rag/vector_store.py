@@ -168,6 +168,37 @@ def similarity_search_with_score(
     return vector_store.similarity_search_with_score(query, k=k, filter=metadata_filter)
 
 
+def get_collection_documents(
+    collection_name: str,
+    metadata_filter: dict[str, Any] | None = None,
+    limit: int | None = None,
+) -> list[Document]:
+    """Read stored documents from a Chroma collection without running embedding search."""
+
+    collection_name = collection_name.strip()
+    if not collection_name:
+        raise ValueError("Collection name is required.")
+
+    settings = get_settings()
+    persist_dir = Path(settings.chroma_persist_dir)
+    persist_dir.mkdir(parents=True, exist_ok=True)
+    client = chromadb.PersistentClient(path=str(persist_dir))
+    collection = client.get_collection(collection_name)
+    get_kwargs: dict[str, Any] = {"include": ["documents", "metadatas"]}
+    if metadata_filter:
+        get_kwargs["where"] = metadata_filter
+    if limit is not None:
+        get_kwargs["limit"] = limit
+    result = collection.get(**get_kwargs)
+
+    documents = result.get("documents") or []
+    metadatas = result.get("metadatas") or [{} for _ in documents]
+    return [
+        Document(page_content=content or "", metadata=metadata or {})
+        for content, metadata in zip(documents, metadatas, strict=False)
+    ]
+
+
 def reset_collection(collection_name: str) -> dict[str, str]:
     """Delete a Chroma collection and remove its manifest entry."""
 

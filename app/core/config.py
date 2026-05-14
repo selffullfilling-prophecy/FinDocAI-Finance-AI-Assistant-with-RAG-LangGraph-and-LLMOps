@@ -1,5 +1,7 @@
 from functools import lru_cache
-from pydantic_settings import BaseSettings, SettingsConfigDict 
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     app_name: str = "FinDocGPT"
@@ -13,8 +15,13 @@ class Settings(BaseSettings):
     nvidia_temperature: float = 0.2
     nvidia_top_p: float = 0.95
     nvidia_max_tokens: int = 4096
-    nvidia_reasoning_enabled: bool = True
+    nvidia_reasoning_enabled: bool = False
     nvidia_reasoning_effort: str = "high"
+
+    rag_max_chars_per_chunk: int = 1800
+    rag_max_total_context_chars: int = 12000
+    rerank_enabled: bool = True
+    rerank_top_k: int = 5
 
     embedding_provider: str = "sentence_transformers"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
@@ -37,6 +44,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
+
 
 @lru_cache()
 def get_settings() -> Settings:

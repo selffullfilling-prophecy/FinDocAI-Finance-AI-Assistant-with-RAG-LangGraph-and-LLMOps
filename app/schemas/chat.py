@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -7,7 +7,12 @@ class ChatRequest(BaseModel):
     question: str
     collection_name: str
     top_k: int = Field(default=5, ge=1, le=20)
+    candidate_k: int = Field(default=20, ge=1, le=50)
     metadata_filter: dict[str, Any] | None = None
+    retrieval_mode: Literal["vector", "keyword", "hybrid"] = "hybrid"
+    rerank: bool = True
+    session_id: str | None = None
+    use_memory: bool = True
 
 
 class SourceChunk(BaseModel):
@@ -18,6 +23,9 @@ class SourceChunk(BaseModel):
     page_start: int | None = None
     page_end: int | None = None
     score: float | None = None
+    vector_score: float | None = None
+    keyword_score: float | None = None
+    final_score: float | None = None
     preview: str
 
 
@@ -25,4 +33,9 @@ class ChatResponse(BaseModel):
     answer: str
     collection_name: str
     top_k: int
+    candidate_k: int
+    retrieval_mode: str
+    rerank: bool
+    session_id: str
     sources: list[SourceChunk]
+    debug: dict[str, Any] | None = None
