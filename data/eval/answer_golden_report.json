@@ -1,327 +1,875 @@
 {
   "total_cases": 15,
-  "passed_cases": 0,
-  "failed_cases": 0,
-  "skipped_cases": 15,
-  "citation_rate": 0.0,
-  "source_section_hit_rate": 0.0,
-  "answer_status_accuracy": 0.0,
-  "insufficient_handling_rate": 0.0,
-  "term_match_rate": 0.0,
+  "passed_cases": 12,
+  "failed_cases": 3,
+  "skipped_cases": 0,
+  "citation_rate": 0.8666666666666667,
+  "source_section_hit_rate": 0.8666666666666667,
+  "answer_status_accuracy": 1.0,
+  "insufficient_handling_rate": 1.0,
+  "term_match_rate": 0.9122222222222222,
   "case_results": [
     {
       "case_id": "aapl_2023_net_sales_drivers",
-      "status": "skipped",
+      "status": "passed",
       "question": "What drove Apple's net sales?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple's net sales in 2023 were driven by a decrease of 3% ($11.0 billion) compared to 2022, primarily due to weakness in foreign currencies relative to the U.S. dollar, which accounted for more than the entire year-over-year decline, along with lower net sales of Mac and iPhone, partially offset by higher net sales of Services [Source 3].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 3,
+          "chunk_id": "item-7-table-001",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 0.847222,
+          "preview": "The Company’s total net sales were $383.3 billion and net income was $97.0 billion during 2023. The Company’s total net sales decreased 3% or $11.0 billion during 2023 compared to 2022. The weakness in foreign currencies relative to the U.S. dollaraccounted for more than the entire year-over-year decrease in total net sales, which consisted primarily of lower net sales of Mac and iPhone, partially offset byhigher net sales of Services."
+        }
+      ],
+      "matched_terms": [
+        "Services",
+        "iPhone",
+        "net sales"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 0.75,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          3
+        ],
+        "original_question": "What drove Apple's net sales?",
+        "rewritten_query": "What drove Apple's net sales?",
+        "retrieval_query": "What drove Apple's net sales?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_total_net_sales_net_income",
-      "status": "skipped",
+      "status": "passed",
       "question": "What were Apple's total net sales and net income in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple's total net sales in 2023 were $383.3 billion, and net income was $97.0 billion [Source 1].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 1,
+          "chunk_id": "item-7-table-001",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.180384,
+          "preview": "The Company’s total net sales were $383.3 billion and net income was $97.0 billion during 2023. The Company’s total net sales decreased 3% or $11.0 billion during 2023 compared to 2022. The weakness in foreign currencies relative to the U.S. dollaraccounted for more than the entire year-over-year decrease in total net sales, which consisted primarily of lower net sales of Mac and iPhone, partially offset byhigher net sales of Services."
+        }
+      ],
+      "matched_terms": [
+        "383.3",
+        "97.0",
+        "net income",
+        "total net sales"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          1
+        ],
+        "original_question": "What were Apple's total net sales and net income in 2023?",
+        "rewritten_query": "What were Apple's total net sales and net income in 2023?",
+        "retrieval_query": "What were Apple's total net sales and net income in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_commercial_paper_interest_rate",
-      "status": "skipped",
+      "status": "passed",
       "question": "What was the weighted-average interest rate of Apple's commercial paper as of September 30, 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "The weighted-average interest rate of Apple's commercial paper as of September 30, 2023 was 5.28% [Source 1].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 1,
+          "chunk_id": "item-8-table-061",
+          "section_item": "8",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 54,
+          "score": 1.32,
+          "preview": "paper program for general corporate purposes, including dividends and share repurchases. As of September 30, 2023 and September 24, 2022, the Companyhad $6.0 billion and $10.0 billion of commercial paper outstanding, respectively, with maturities generally less than nine months. The weighted-average interestrate of the Company’s commercial paper was 5.28% and 2.31% as of September 30, 2023 and September 24, 2022, respectively. The following table provides a summary of cash flows associated with the issuance and maturities of commercial paper for 2023, 2022 and 2021 (in millions): 2023 2022 2021"
+        }
+      ],
+      "matched_terms": [
+        "5.28",
+        "commercial paper",
+        "weighted-average interest rate"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          1
+        ],
+        "original_question": "What was the weighted-average interest rate of Apple's commercial paper as of September 30, 2023?",
+        "rewritten_query": "What was the weighted-average interest rate of Apple's commercial paper as of September 30, 2023?",
+        "retrieval_query": "What was the weighted-average interest rate of Apple's commercial paper as of September 30, 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_net_sales_decrease_explanation",
-      "status": "skipped",
+      "status": "passed",
       "question": "Why did Apple’s total net sales decrease in 2023 compared to 2022?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple’s total net sales decreased 3% or $11.0 billion in 2023 compared to 2022 primarily due to the weakness in foreign currencies relative to the U.S. dollar, which accounted for more than the entire year-over-year decrease. The decline consisted mainly of lower net sales of Mac and iPhone, partially offset by higher net sales of Services [Source 4].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 4,
+          "chunk_id": "item-7-table-001",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.187215,
+          "preview": "The Company’s total net sales were $383.3 billion and net income was $97.0 billion during 2023. The Company’s total net sales decreased 3% or $11.0 billion during 2023 compared to 2022. The weakness in foreign currencies relative to the U.S. dollaraccounted for more than the entire year-over-year decrease in total net sales, which consisted primarily of lower net sales of Mac and iPhone, partially offset byhigher net sales of Services."
+        }
+      ],
+      "matched_terms": [
+        "$11.0 billion",
+        "3%",
+        "Mac",
+        "Services",
+        "foreign currencies",
+        "iPhone"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          4
+        ],
+        "original_question": "Why did Apple’s total net sales decrease in 2023 compared to 2022?",
+        "rewritten_query": "Why did Apple’s total net sales decrease in 2023 compared to 2022?",
+        "retrieval_query": "Why did Apple’s total net sales decrease in 2023 compared to 2022?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_product_category_changes",
-      "status": "skipped",
+      "status": "failed",
       "question": "Which product categories increased or decreased in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "In 2023 compared to 2022, Services increased, while iPhone, Mac, iPad, and Wearables, Home and Accessories decreased. Total net sales also decreased. [Source 3]",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 3,
+          "chunk_id": "item-8-table-025",
+          "section_item": "8",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 54,
+          "score": 0.740335,
+          "preview": "Net sales disaggregated by significant products and services for 2023, 2022 and 2021 were as follows (in millions): 2023 2022 2021 iPhone $ 200,583 $ 205,489 $ 191,973 Mac 29,357 40,177 35,190 iPad 28,300 29,292 31,862 Wearables, Home and Accessories 39,845 41,241 38,367 Services 85,200 78,129 68,425 Total net sales $ 383,285 $ 394,328 $ 365,817"
+        }
+      ],
+      "matched_terms": [
+        "Mac",
+        "Services",
+        "Wearables",
+        "iPad",
+        "iPhone"
+      ],
       "missing_terms": [],
-      "citation_present": false,
+      "citation_present": true,
       "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          3
+        ],
+        "original_question": "Which product categories increased or decreased in 2023?",
+        "rewritten_query": "Which product categories increased or decreased in 2023?",
+        "retrieval_query": "Which product categories increased or decreased in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
       "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+        "No source section matched expected_source_sections: ['7']."
       ]
     },
     {
       "case_id": "aapl_2023_gross_margin_percentage",
-      "status": "skipped",
+      "status": "passed",
       "question": "What was Apple’s gross margin percentage in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple’s total gross margin percentage in 2023 was 44.1% [Source 3].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 3,
+          "chunk_id": "item-7-table-009",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.007536,
+          "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+        }
+      ],
+      "matched_terms": [
+        "44.1",
+        "gross margin percentage"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          3
+        ],
+        "original_question": "What was Apple’s gross margin percentage in 2023?",
+        "rewritten_query": "What was Apple’s gross margin percentage in 2023?",
+        "retrieval_query": "What was Apple’s gross margin percentage in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_services_gross_margin_percentage",
-      "status": "skipped",
+      "status": "passed",
       "question": "What was Apple’s Services gross margin percentage in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple’s Services gross margin percentage in 2023 was 70.8% [Source 2].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 2,
+          "chunk_id": "item-7-table-009",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.24651,
+          "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+        }
+      ],
+      "matched_terms": [
+        "70.8",
+        "Services",
+        "gross margin percentage"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          2
+        ],
+        "original_question": "What was Apple’s Services gross margin percentage in 2023?",
+        "rewritten_query": "What was Apple’s Services gross margin percentage in 2023?",
+        "retrieval_query": "What was Apple’s Services gross margin percentage in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_products_gross_margin_percentage",
-      "status": "skipped",
+      "status": "passed",
       "question": "What was Apple’s Products gross margin percentage in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple’s Products gross margin percentage in 2023 was 36.5% [Source 3].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 3,
+          "chunk_id": "item-7-table-009",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.2098,
+          "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+        }
+      ],
+      "matched_terms": [
+        "36.5",
+        "Products",
+        "gross margin percentage"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          3
+        ],
+        "original_question": "What was Apple’s Products gross margin percentage in 2023?",
+        "rewritten_query": "What was Apple’s Products gross margin percentage in 2023?",
+        "retrieval_query": "What was Apple’s Products gross margin percentage in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2023_services_net_sales",
-      "status": "skipped",
+      "status": "failed",
       "question": "How much were Apple's Services net sales in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple's Services net sales in 2023 were $85,200 million [Source 2].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
-      "missing_terms": [],
-      "citation_present": false,
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 2,
+          "chunk_id": "item-8-table-025",
+          "section_item": "8",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 54,
+          "score": 1.092918,
+          "preview": "Net sales disaggregated by significant products and services for 2023, 2022 and 2021 were as follows (in millions): 2023 2022 2021 iPhone $ 200,583 $ 205,489 $ 191,973 Mac 29,357 40,177 35,190 iPad 28,300 29,292 31,862 Wearables, Home and Accessories 39,845 41,241 38,367 Services 85,200 78,129 68,425 Total net sales $ 383,285 $ 394,328 $ 365,817"
+        }
+      ],
+      "matched_terms": [
+        "Services",
+        "net sales"
+      ],
+      "missing_terms": [
+        "85.2"
+      ],
+      "citation_present": true,
       "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 0.6666666666666666,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          2
+        ],
+        "original_question": "How much were Apple's Services net sales in 2023?",
+        "rewritten_query": "How much were Apple's Services net sales in 2023?",
+        "retrieval_query": "How much were Apple's Services net sales in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
       "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+        "Answer is missing expected_terms_all: ['85.2'].",
+        "No source section matched expected_source_sections: ['7']."
       ]
     },
     {
       "case_id": "aapl_2023_operating_cash_flow",
-      "status": "skipped",
+      "status": "failed",
       "question": "What was Apple's cash generated by operating activities in 2023?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple's cash generated by operating activities in 2023 was $110,543 million [Source 2].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
-      "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 2,
+          "chunk_id": "item-8-table-020",
+          "section_item": "8",
+          "chunk_type": "table",
+          "page_start": 30,
+          "page_end": 54,
+          "score": 0.84,
+          "preview": "Accounts receivable, net (1,688) (1,823) (10,125) Vendor non-trade receivables 1,271 (7,520) (3,903) Inventories (1,618) 1,484 (2,642) Other current and non-current assets (5,684) (6,499) (8,042) Accounts payable (1,889) 9,448 12,326 Other current and non-current liabilities 3,031 6,110 7,475 Cash generated by operating activities 110,543 122,151 104,038"
+        }
+      ],
+      "matched_terms": [
+        "cash",
+        "operating activities"
+      ],
+      "missing_terms": [
+        "110.5"
+      ],
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 0.6666666666666666,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          2
+        ],
+        "original_question": "What was Apple's cash generated by operating activities in 2023?",
+        "rewritten_query": "What was Apple's cash generated by operating activities in 2023?",
+        "retrieval_query": "What was Apple's cash generated by operating activities in 2023?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
       "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+        "Answer is missing expected_terms_all: ['110.5']."
       ]
     },
     {
       "case_id": "aapl_2023_risk_factors",
-      "status": "skipped",
+      "status": "passed",
       "question": "What are Apple's key risk factors?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Based on the provided context from Apple's 2023 Form 10-K, the key risk factors include:\n\n- Disruptions from political events, trade disputes, war, terrorism, natural disasters, public health issues, and industrial accidents [Source 1].\n- Reliance on third-party software developers and the risk that their applications fail to keep pace with technological change, leading to dissatisfied customers and lower demand [Source 2].\n- Intense competition in global markets with price pressure, short product cycles, and the need for continuous innovation, requiring significant R&D investments with uncertain returns [Source 3].\n- Potential outages, defects, and quality issues in hardware, software, and services, which could lead to liability claims, recalls, warranty expenses, and harm to reputation and sales [Source 4].\n- Legal and regulatory proceedings that could require changes in business practices and may not be fully covered by insurance [Source 5].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 1,
+          "chunk_id": "item-1A-text-003",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "score": 0.883333,
+          "preview": "The Company’s business can be impacted by political events, trade and other international disputes, war, terrorism, natural disasters, public healthissues, industrial accidents and other business interruptions. Political events, trade and other international disputes, war, ter..."
+        },
+        {
+          "rank": 2,
+          "source_number": 2,
+          "chunk_id": "item-1A-text-027",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "score": 0.610329,
+          "preview": "The Company relies on the continued availability and development of compelling and innovative software applications for its products. The Company’s productsand operating systems are subject to rapid technological change, and when third-party developers are unable to or choose..."
+        },
+        {
+          "rank": 3,
+          "source_number": 3,
+          "chunk_id": "item-1A-text-009",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "score": 0.54654,
+          "preview": "The Company’s products and services are offered in highly competitive global markets characterized by aggressive price competition and resulting downwardpressure on gross margins, frequent introduction of new products and services, short product life cycles, evolving industry..."
+        },
+        {
+          "rank": 4,
+          "source_number": 4,
+          "chunk_id": "item-1A-text-021",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "score": 0.528368,
+          "preview": "time to time experience outages, service slowdowns or errors. As a result, from time to time the Company’s services have not performed as anticipated and maynot meet customer expectations. There can be no assurance the Company will be able to detect and fix all issues and defe..."
+        },
+        {
+          "rank": 5,
+          "source_number": 5,
+          "chunk_id": "item-1A-text-045",
+          "section_item": "1A",
+          "chunk_type": "section_text",
+          "page_start": 8,
+          "page_end": 19,
+          "score": 0.484358,
+          "preview": "disgorgement of revenue or profits, remedial corporate measures or injunctive relief against the Company, and has from time to time required, and can in thefuture require, the Company to change its business practices and limit the Company’s ability to offer certain products an..."
+        }
+      ],
+      "matched_terms": [
+        "competition",
+        "legal",
+        "regulatory"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 0.6,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "original_question": "What are Apple's key risk factors?",
+        "rewritten_query": "What are Apple's key risk factors?",
+        "retrieval_query": "What are Apple's key risk factors?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2024_weighted_average_interest_rate_insufficient",
-      "status": "skipped",
+      "status": "passed",
       "question": "What was Apple's weighted average interest rate in 2024?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "The provided documents do not contain enough information to answer this question.",
+      "answer_status": "insufficient_context",
       "expected_answer_status": "insufficient_context",
       "sources": [],
       "matched_terms": [],
       "missing_terms": [],
       "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [],
+        "original_question": "What was Apple's weighted average interest rate in 2024?",
+        "rewritten_query": "What was Apple's weighted average interest rate in 2024?",
+        "retrieval_query": "What was Apple's weighted average interest rate in 2024?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_2025_revenue_guidance_insufficient",
-      "status": "skipped",
+      "status": "passed",
       "question": "What was Apple's revenue guidance for 2025?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "The provided documents do not contain enough information to answer this question.",
+      "answer_status": "insufficient_context",
       "expected_answer_status": "insufficient_context",
       "sources": [],
       "matched_terms": [],
       "missing_terms": [],
       "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
-      ]
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [],
+        "original_question": "What was Apple's revenue guidance for 2025?",
+        "rewritten_query": "What was Apple's revenue guidance for 2025?",
+        "retrieval_query": "What was Apple's revenue guidance for 2025?",
+        "is_follow_up": false,
+        "used_history_turns": 0,
+        "rewrite_strategy": "disabled",
+        "invalid_citation_numbers": []
+      },
+      "issues": []
     },
     {
       "case_id": "aapl_gross_margin_services_followup",
-      "status": "skipped",
-      "question": "",
+      "status": "passed",
+      "question": "How about Services?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple’s Services gross margin percentage in 2023 was 70.8% [Source 2].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 2,
+          "chunk_id": "item-7-table-009",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.266084,
+          "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+        }
+      ],
+      "matched_terms": [
+        "70.8",
+        "Services",
+        "gross margin percentage"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          2
+        ],
+        "original_question": "How about Services?",
+        "rewritten_query": "What was Apple's Services gross margin percentage in 2023?",
+        "retrieval_query": "What was Apple's Services gross margin percentage in 2023?",
+        "is_follow_up": true,
+        "used_history_turns": 2,
+        "rewrite_strategy": "rule_based",
+        "invalid_citation_numbers": []
+      },
+      "issues": [],
+      "turn_outputs": [
+        {
+          "turn": 1,
+          "question": "What was Apple’s gross margin percentage in 2023?",
+          "answer": "Apple’s total gross margin percentage in 2023 was 44.1% [Source 3].",
+          "answer_status": "answered",
+          "sources": [
+            {
+              "rank": 1,
+              "source_number": 3,
+              "chunk_id": "item-7-table-009",
+              "section_item": "7",
+              "chunk_type": "table",
+              "page_start": 23,
+              "page_end": 28,
+              "score": 1.007536,
+              "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+            }
+          ],
+          "debug": {
+            "candidate_count": 20,
+            "cited_source_numbers": [
+              3
+            ],
+            "original_question": "What was Apple’s gross margin percentage in 2023?",
+            "rewritten_query": "What was Apple’s gross margin percentage in 2023?",
+            "retrieval_query": "What was Apple’s gross margin percentage in 2023?",
+            "is_follow_up": false,
+            "used_history_turns": 0,
+            "rewrite_strategy": "none",
+            "invalid_citation_numbers": []
+          }
+        },
+        {
+          "turn": 2,
+          "question": "How about Services?",
+          "answer": "Apple’s Services gross margin percentage in 2023 was 70.8% [Source 2].",
+          "answer_status": "answered",
+          "sources": [
+            {
+              "rank": 1,
+              "source_number": 2,
+              "chunk_id": "item-7-table-009",
+              "section_item": "7",
+              "chunk_type": "table",
+              "page_start": 23,
+              "page_end": 28,
+              "score": 1.266084,
+              "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+            }
+          ],
+          "debug": {
+            "candidate_count": 20,
+            "cited_source_numbers": [
+              2
+            ],
+            "original_question": "How about Services?",
+            "rewritten_query": "What was Apple's Services gross margin percentage in 2023?",
+            "retrieval_query": "What was Apple's Services gross margin percentage in 2023?",
+            "is_follow_up": true,
+            "used_history_turns": 2,
+            "rewrite_strategy": "rule_based",
+            "invalid_citation_numbers": []
+          }
+        }
       ]
     },
     {
       "case_id": "aapl_gross_margin_products_followup",
-      "status": "skipped",
-      "question": "",
+      "status": "passed",
+      "question": "What about Products?",
       "collection_name": "findoc_nasdaq_aapl_2023",
-      "answer": "",
-      "answer_status": "",
+      "answer": "Apple’s Products gross margin percentage in 2023 was 36.5% [Source 3].",
+      "answer_status": "answered",
       "expected_answer_status": "answered",
-      "sources": [],
-      "matched_terms": [],
+      "sources": [
+        {
+          "rank": 1,
+          "source_number": 3,
+          "chunk_id": "item-7-table-009",
+          "section_item": "7",
+          "chunk_type": "table",
+          "page_start": 23,
+          "page_end": 28,
+          "score": 1.22505,
+          "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+        }
+      ],
+      "matched_terms": [
+        "36.5",
+        "Products",
+        "gross margin percentage"
+      ],
       "missing_terms": [],
-      "citation_present": false,
-      "source_section_hit": false,
-      "answer_status_match": false,
-      "insufficient_handled": false,
-      "term_match_rate": 0.0,
-      "debug": {},
-      "issues": [
-        "RUN_LLM_EVAL is not set to 1; skipping live LLM answer eval."
+      "citation_present": true,
+      "source_section_hit": true,
+      "answer_status_match": true,
+      "insufficient_handled": true,
+      "term_match_rate": 1.0,
+      "debug": {
+        "candidate_count": 20,
+        "cited_source_numbers": [
+          3
+        ],
+        "original_question": "What about Products?",
+        "rewritten_query": "What was Apple's Products gross margin percentage in 2023?",
+        "retrieval_query": "What was Apple's Products gross margin percentage in 2023?",
+        "is_follow_up": true,
+        "used_history_turns": 2,
+        "rewrite_strategy": "rule_based",
+        "invalid_citation_numbers": []
+      },
+      "issues": [],
+      "turn_outputs": [
+        {
+          "turn": 1,
+          "question": "What was Apple’s gross margin percentage in 2023?",
+          "answer": "Apple’s total gross margin percentage in 2023 was 44.1% [Source 3].",
+          "answer_status": "answered",
+          "sources": [
+            {
+              "rank": 1,
+              "source_number": 3,
+              "chunk_id": "item-7-table-009",
+              "section_item": "7",
+              "chunk_type": "table",
+              "page_start": 23,
+              "page_end": 28,
+              "score": 1.007536,
+              "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+            }
+          ],
+          "debug": {
+            "candidate_count": 20,
+            "cited_source_numbers": [
+              3
+            ],
+            "original_question": "What was Apple’s gross margin percentage in 2023?",
+            "rewritten_query": "What was Apple’s gross margin percentage in 2023?",
+            "retrieval_query": "What was Apple’s gross margin percentage in 2023?",
+            "is_follow_up": false,
+            "used_history_turns": 0,
+            "rewrite_strategy": "none",
+            "invalid_citation_numbers": []
+          }
+        },
+        {
+          "turn": 2,
+          "question": "What about Products?",
+          "answer": "Apple’s Products gross margin percentage in 2023 was 36.5% [Source 3].",
+          "answer_status": "answered",
+          "sources": [
+            {
+              "rank": 1,
+              "source_number": 3,
+              "chunk_id": "item-7-table-009",
+              "section_item": "7",
+              "chunk_type": "table",
+              "page_start": 23,
+              "page_end": 28,
+              "score": 1.22505,
+              "preview": "Products 36.5 % 36.3 % 35.3 % Services 70.8 % 71.7 % 69.7 % Total gross margin percentage 44.1 % 43.3 % 41.8 %"
+            }
+          ],
+          "debug": {
+            "candidate_count": 20,
+            "cited_source_numbers": [
+              3
+            ],
+            "original_question": "What about Products?",
+            "rewritten_query": "What was Apple's Products gross margin percentage in 2023?",
+            "retrieval_query": "What was Apple's Products gross margin percentage in 2023?",
+            "is_follow_up": true,
+            "used_history_turns": 2,
+            "rewrite_strategy": "rule_based",
+            "invalid_citation_numbers": []
+          }
+        }
       ]
     }
   ]

@@ -18,6 +18,11 @@ FOLLOW_UP_PHRASES = [
 ]
 FOLLOW_UP_PRONOUNS = {"that", "it", "those", "them", "this", "same"}
 SHORT_ENTITIES = {
+    "aws",
+    "azure",
+    "automotive",
+    "linkedin",
+    "office",
     "services",
     "products",
     "iphone",
@@ -38,6 +43,28 @@ METRIC_PHRASES = [
     "risk factors",
     "revenue",
 ]
+COMPANY_ALIASES = {
+    "Apple": ("Apple", "AAPL"),
+    "Microsoft": ("Microsoft", "MSFT"),
+    "Tesla": ("Tesla", "TSLA"),
+    "Nvidia": ("Nvidia", "NVDA"),
+    "Amazon": ("Amazon", "AMZN"),
+    "Alphabet": ("Alphabet", "Google", "GOOG", "GOOGL"),
+    "Meta": ("Meta", "Facebook"),
+}
+COMPANY_DIMENSIONS = {
+    "Apple": ("Services", "Products", "iPhone", "Mac", "iPad", "Wearables"),
+    "Microsoft": (
+        "Productivity and Business Processes",
+        "Intelligent Cloud",
+        "More Personal Computing",
+        "Azure",
+        "LinkedIn",
+        "Office",
+    ),
+    "Tesla": ("Energy Generation and Storage", "Services and Other", "Automotive"),
+    "Amazon": ("North America", "International", "AWS"),
+}
 
 
 def build_retrieval_query(
@@ -123,12 +150,12 @@ def is_follow_up_question(question: str) -> bool:
         return True
 
     tokens = re.findall(r"[a-zA-Z0-9']+", question_lower)
-    token_set = set(tokens)
+    token_set = set(tokens) # dùng set để kiểm tra nhanh hơn
     if question_lower.startswith("and "):
         return True
     if token_set & FOLLOW_UP_PRONOUNS and len(tokens) <= 12:
         return True
-    if len(tokens) <= 4 and (token_set & SHORT_ENTITIES or has_year):
+    if len(tokens) <= 4 and (token_set & SHORT_ENTITIES or has_year): # check giao của 2 set 
         return True
     if len(tokens) <= 5 and not has_metric:
         return True
@@ -141,27 +168,29 @@ def rule_based_rewrite(question: str, history_text: str) -> str | None:
     if not previous_question:
         return None
 
-    company = _extract_company(previous_question) or "Apple"
+    current_company = _extract_company(question)
+    company = current_company or _extract_company(previous_question)
     previous_year = _extract_year(previous_question)
     current_year = _extract_year(question)
     year = current_year or previous_year
-    metric = _extract_metric(previous_question)
-    dimension = _extract_dimension(question)
+    current_metric = _extract_metric(question)
+    metric = current_metric or _extract_metric(previous_question)
+    dimension = _extract_dimension(question, company)
 
-    if not metric or not year:
+    if not company or not metric or not year:
         return None
 
     if metric == "gross margin percentage":
         if dimension in {"Services", "Products"}:
             return f"What was {company}'s {dimension} gross margin percentage in {year}?"
-        if current_year:
+        if current_year or current_company or current_metric:
             return f"What was {company}'s gross margin percentage in {year}?"
 
     if metric == "total net sales and net income":
-        if current_year:
+        if current_year or current_company or current_metric:
             return f"What were {company}'s total net sales and net income in {year}?"
 
-    if current_year:
+    if current_year or current_company or current_metric:
         return f"What was {company}'s {metric} in {year}?"
 
     if dimension:
@@ -179,8 +208,15 @@ def _latest_user_question(history_text: str) -> str:
 
 
 def _extract_company(text: str) -> str | None:
-    if re.search(r"\bapple(?:'s|’s)?\b", text, flags=re.IGNORECASE):
-        return "Apple"
+    aliases = (
+        (canonical_name, alias)
+        for canonical_name, company_aliases in COMPANY_ALIASES.items()
+        for alias in company_aliases
+    )
+    for canonical_name, alias in sorted(aliases, key=lambda item: len(item[1]), reverse=True):
+        pattern = rf"(?<![A-Za-z0-9]){re.escape(alias)}(?:'s|’s)?(?![A-Za-z0-9])"
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return canonical_name
     return None
 
 
@@ -201,8 +237,11 @@ def _extract_metric(text: str) -> str | None:
     return None
 
 
-def _extract_dimension(text: str) -> str | None:
-    for entity in ["Services", "Products", "iPhone", "Mac", "iPad", "Wearables"]:
+def _extract_dimension(text: str, company: str | None = None) -> str | None:
+    if not company:
+        return None
+
+    for entity in sorted(COMPANY_DIMENSIONS.get(company, ()), key=len, reverse=True):
         if re.search(rf"\b{re.escape(entity)}\b", text, flags=re.IGNORECASE):
             return entity
     return None

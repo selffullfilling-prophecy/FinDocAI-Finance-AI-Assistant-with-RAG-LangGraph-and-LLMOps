@@ -46,6 +46,61 @@ def test_rule_based_rewrite_year_for_net_sales_and_net_income():
     assert rewritten == "What were Apple's total net sales and net income in 2022?"
 
 
+def test_rule_based_rewrite_year_for_microsoft_revenue():
+    history = "User: What was Microsoft's revenue in 2023?"
+
+    rewritten = query_rewriter.rule_based_rewrite("What about 2024?", history)
+
+    assert rewritten == "What was Microsoft's revenue in 2024?"
+
+
+def test_rule_based_rewrite_metric_for_tesla_net_income():
+    history = "User: What was Tesla's revenue in 2023?"
+
+    rewritten = query_rewriter.rule_based_rewrite("And net income?", history)
+
+    assert rewritten == "What was Tesla's net income in 2023?"
+
+
+def test_rule_based_rewrite_allows_explicit_company_switch():
+    history = "User: What was Apple's revenue in 2023?"
+
+    rewritten = query_rewriter.rule_based_rewrite("How about Microsoft?", history)
+
+    assert rewritten == "What was Microsoft's revenue in 2023?"
+
+
+def test_rule_based_rewrite_returns_none_for_unknown_company():
+    history = "User: What was Contoso's revenue in 2023?"
+
+    rewritten = query_rewriter.rule_based_rewrite("What about 2024?", history)
+
+    assert rewritten is None
+
+
+def test_rule_based_rewrite_returns_none_when_history_has_no_company():
+    history = "User: What was revenue in 2023?"
+
+    rewritten = query_rewriter.rule_based_rewrite("What about 2024?", history)
+
+    assert rewritten is None
+
+
+def test_extract_company_supports_names_possessives_and_tickers():
+    assert query_rewriter._extract_company("What was Microsoft’s revenue?") == "Microsoft"
+    assert query_rewriter._extract_company("Compare MSFT net income.") == "Microsoft"
+    assert query_rewriter._extract_company("What about Google revenue?") == "Alphabet"
+    assert query_rewriter._extract_company("What was NVDA revenue?") == "Nvidia"
+    assert query_rewriter._extract_company("What was Contoso revenue?") is None
+
+
+def test_extract_dimension_is_company_aware():
+    assert query_rewriter._extract_dimension("How about Azure?", "Microsoft") == "Azure"
+    assert query_rewriter._extract_dimension("How about AWS?", "Amazon") == "AWS"
+    assert query_rewriter._extract_dimension("How about Azure?", "Apple") is None
+    assert query_rewriter._extract_dimension("How about Services?") is None
+
+
 def test_build_retrieval_query_disabled_returns_original_question():
     session_id = "unit-test-query-rewrite-disabled"
     memory_store.clear_session(session_id)

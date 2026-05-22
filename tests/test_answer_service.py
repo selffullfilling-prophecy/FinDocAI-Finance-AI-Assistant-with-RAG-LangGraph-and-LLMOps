@@ -400,6 +400,32 @@ def test_follow_up_uses_history_only_when_enabled(monkeypatch):
     memory_store.clear_session(session_id)
 
 
+def test_follow_up_rewrite_retrieves_with_microsoft_history(monkeypatch):
+    session_id = "unit-test-follow-up-microsoft"
+    memory_store.clear_session(session_id)
+    memory_store.add_user_message(session_id, "What was Microsoft's revenue in 2023?")
+    calls = {}
+
+    def fake_retrieve_candidates(query, **kwargs):
+        calls["query"] = query
+        return [_candidate()]
+
+    monkeypatch.setattr(answer_service, "retrieve_candidates", fake_retrieve_candidates)
+    monkeypatch.setattr(answer_service, "generate_answer", lambda prompt: "Answer. [Source 1]")
+
+    result = answer_service.answer_question(
+        "What about 2024?",
+        "test_collection",
+        session_id=session_id,
+        use_memory=True,
+        use_memory_for_retrieval=True,
+    )
+
+    assert calls["query"] == "What was Microsoft's revenue in 2024?"
+    assert result["debug"]["rewrite_strategy"] == "rule_based"
+    memory_store.clear_session(session_id)
+
+
 def test_is_follow_up_question_false_for_standalone_metric_year_question():
     assert is_follow_up_question("What was Apple's gross margin percentage in 2023?") is False
     assert is_follow_up_question("What about 2022?") is True
